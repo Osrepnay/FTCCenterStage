@@ -18,14 +18,15 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SO
 */
 package org.firstinspires.ftc.teamcode;
 
+import com.qualcomm.hardware.rev.RevHubOrientationOnRobot;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.Blinker;
-import com.qualcomm.robotcore.hardware.CRServo;
 import com.qualcomm.robotcore.hardware.DcMotor;
-import com.qualcomm.robotcore.hardware.DcMotorSimple;
-import com.qualcomm.robotcore.hardware.Gyroscope;
+import com.qualcomm.robotcore.hardware.IMU;
 import com.qualcomm.robotcore.hardware.Servo;
+
+import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 
 /**
  * This file contains an example of an iterative (Non-Linear) "OpMode".
@@ -42,16 +43,34 @@ import com.qualcomm.robotcore.hardware.Servo;
 public class MainTele extends OpMode {
     /* Declare OpMode members. */
     private Blinker controlHub;
+    private IMU imu;
     private DcMotor[][] wheels; // see init() for layout
     // private DcMotor[] arms;
-    private Servo armServo;
     private DcMotor intake;
-    private CRServo intakeWinch;
+    private DcMotor winch;
+    private DcMotor[] arm;
+    private Servo grabber;
+    private final double GRABBER_START = 0.025;
+    private final double GRABBER_SINGLE = 0.06;
+    private final double GRABBER_DOUBLE = 0.15;
+    private Servo wrist;
+    private final double WRIST_START = 0.013;
+    private final double WRIST_DUMP = 0.27;
 
     @Override
     public void init() {
         telemetry.addData("Status", "Initialized");
         controlHub = hardwareMap.get(Blinker.class, "Control Hub");
+        imu = hardwareMap.get(IMU.class, "imu");
+        imu.initialize(
+                new IMU.Parameters(
+                        new RevHubOrientationOnRobot(
+                                RevHubOrientationOnRobot.LogoFacingDirection.UP,
+                                RevHubOrientationOnRobot.UsbFacingDirection.BACKWARD
+                        )
+                )
+        );
+        imu.resetYaw();
 
         String[][] wheelNames = {
                 {"wheelFrontleft", "wheelFrontright"},
@@ -62,23 +81,26 @@ public class MainTele extends OpMode {
             // left wheel turns back when motor turning clockwise
             wheels[i][0] = hardwareMap.get(DcMotor.class, wheelNames[i][0]);
             wheels[i][0].setDirection(DcMotor.Direction.REVERSE);
-            // wheels[i][0].setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+            wheels[i][0].setMode(DcMotor.RunMode.RUN_USING_ENCODER);
             // wheels[i][0].setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
 
             wheels[i][1] = hardwareMap.get(DcMotor.class, wheelNames[i][1]);
             wheels[i][1].setDirection(DcMotor.Direction.FORWARD);
-            // wheels[i][1].setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+            wheels[i][1].setMode(DcMotor.RunMode.RUN_USING_ENCODER);
             // wheels[i][1].setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         }
-        // arms = new DcMotor[2];
-        // arms[0] = hardwareMap.get(DcMotor.class, "armRight");
-        // arms[0].setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
-        // arms[1] = hardwareMap.get(DcMotor.class, "armRight");
-        // arms[1].setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
-        // arms[1].setDirection(DcMotorSimple.Direction.FORWARD);
-        // armServo = hardwareMap.get(Servo.class, "armServo");
         intake = hardwareMap.get(DcMotor.class, "intake");
-        intakeWinch = hardwareMap.get(CRServo.class, "intakeWinch");
+        winch = hardwareMap.get(DcMotor.class, "winch");
+        arm = new DcMotor[2];
+        arm[0] = hardwareMap.get(DcMotor.class, "arm0");
+        arm[0].setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        arm[1] = hardwareMap.get(DcMotor.class, "arm1");
+        arm[1].setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        grabber = hardwareMap.get(Servo.class, "grabber");
+        grabber.setPosition(GRABBER_START);
+        wrist = hardwareMap.get(Servo.class, "wrist");
+        wrist.setDirection(Servo.Direction.REVERSE);
+        wrist.setPosition(WRIST_START);
     }
 
     /*
@@ -96,11 +118,24 @@ public class MainTele extends OpMode {
 
     }
 
-    private double goodabs(double n) {
-        if (n < 0) {
-            return -n;
-        } else {
-            return n;
+    private double[][] xyrPower(double x, double y, double rot) {
+        return new double[][] {
+                {x + y + rot, y - x - rot},
+                {y - x + rot, x + y - rot}
+        };
+    }
+
+    private void powerWheels(double[][] power) {
+        double normFac = 1;
+        for (int i = 0; i < wheels.length; i++) {
+            for (int j = 0; j < wheels[i].length; j++) {
+                normFac = Math.max(power[i][j], normFac);
+            }
+        }
+        for (int i = 0; i < wheels.length; i++) {
+            for (int j = 0; j < wheels[i].length; j++) {
+                wheels[i][j].setPower(power[i][j]);
+            }
         }
     }
 
@@ -109,70 +144,45 @@ public class MainTele extends OpMode {
      */
     @Override
     public void loop() {
-        double[][] rotateRightScale = {
-                {1, -1},
-                {1, -1}
-        };
-        double[][] rotateLeftScale = {
-                {-1, 1},
-                {-1, 1}
-        };
-
         double[][] activeScale;
-        double pressedY = gamepad1.right_stick_y;
-        double powerY = pressedY;
+        double pressedX = gamepad1.right_stick_x;
+        double pressedY = -gamepad1.right_stick_y;
+        // field centric drive
+        // https://matthew-brett.github.io/teaching/rotation_2d.html
+        double yaw = -imu.getRobotYawPitchRollAngles().getYaw(AngleUnit.RADIANS);
+        telemetry.addData("yaw", yaw);
+        double yawCos = Math.cos(yaw);
+        double yawSin = Math.sin(yaw);
+        double adjustedX = yawCos * pressedX - yawSin * pressedY;
+        double adjustedY = yawSin * pressedX + yawCos * pressedY;
+        telemetry.addData("adjX", adjustedX);
+        telemetry.addData("adjY", adjustedY);
+        double rotate = gamepad1.right_trigger - gamepad1.left_trigger;
+        powerWheels(xyrPower(adjustedX, adjustedY, rotate));
 
-        double pressedX = -gamepad1.right_stick_x;
-        double powerX = pressedX;
-
-        double power;
-        telemetry.addData("pressedx", pressedX);
-        telemetry.addData("pressedy", pressedY);
-        telemetry.addData("powerx", powerX);
-        telemetry.addData("powery", powerY);
-        if (gamepad1.right_trigger > 0.01) {
-            power = gamepad1.right_trigger;
-            activeScale = rotateRightScale;
-        } else if (gamepad1.left_trigger > 0.01) {
-            power = gamepad1.left_trigger;
-            activeScale = rotateLeftScale;
-        } else {
-            activeScale = new double[][]{
-                    {powerX + powerY, powerY - powerX},
-                    {powerY - powerX, powerX + powerY}
-            };
-            power = 1;
-        }
-        telemetry.addData("Power", power);
-        for (int i = 0; i < activeScale.length; i++) {
-            for (int j = 0; j < activeScale[i].length; j++) {
-                wheels[i][j].setPower(power * activeScale[i][j]);
-            }
+        double armPower = gamepad1.left_stick_y + gamepad2.left_stick_y;
+        for (DcMotor m : arm) {
+            m.setPower(armPower);
         }
 
-        double armPower = -gamepad1.left_stick_y + gamepad2.left_stick_y;
-        // arms[0].setPower(armPower);
-        // arms[1].setPower(armPower);
-        if (gamepad1.left_bumper || gamepad2.left_bumper) {
-            //armServo.setPosition(0);
-        } else if (gamepad1.right_bumper || gamepad2.right_bumper) {
-            // armServo.setPosition(0.256);
-        }
-        // telemetry.addData("Servo angle", armServo.getPosition());
-
-        if (gamepad1.x) {
-            intakeWinch.setPower(-1);
-        } else if (gamepad1.a) {
-            intakeWinch.setPower(0);
-        } else if (gamepad1.b) {
-            intakeWinch.setPower(1);
-        }
         if (gamepad1.dpad_up) {
             intake.setPower(1);
         } else if (gamepad1.dpad_left) {
             intake.setPower(0);
         } else if (gamepad1.dpad_down) {
             intake.setPower(-1);
+        }
+
+        if (gamepad1.options) {
+            imu.resetYaw();
+        }
+        if (gamepad1.x) grabber.setPosition(GRABBER_START);
+        if (gamepad1.y) grabber.setPosition(GRABBER_SINGLE);
+        if (gamepad1.b) grabber.setPosition(GRABBER_DOUBLE);
+        if (gamepad1.left_bumper) wrist.setPosition(WRIST_START);
+        if (gamepad1.right_bumper) wrist.setPosition(WRIST_DUMP);
+        if (gamepad1.x) {
+            winch.setPower((gamepad1.dpad_right ? 1 : 0) - (gamepad1.dpad_left ? 1 : 0));
         }
     }
 
