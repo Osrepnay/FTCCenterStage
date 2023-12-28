@@ -28,6 +28,11 @@ import com.qualcomm.robotcore.hardware.Servo;
 
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 
+import java.util.Queue;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
 /**
  * This file contains an example of an iterative (Non-Linear) "OpMode".
  * An OpMode is a 'program' that runs in either the autonomous or the teleop period of an FTC match.
@@ -42,20 +47,71 @@ import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 
 public class MainTele extends OpMode {
     /* Declare OpMode members. */
-    private Blinker controlHub;
-    private IMU imu;
-    private DcMotor[][] wheels; // see init() for layout
-    // private DcMotor[] arms;
+    private static final double JOY_DEADZONE = 0.01;
+    Blinker controlHub;
+    IMU imu;
+    private DcMotor[][] wheels;
     private DcMotor intake;
     private DcMotor winch;
     private DcMotor[] arm;
     private Servo grabber;
-    private final double GRABBER_START = 0.025;
-    private final double GRABBER_SINGLE = 0.06;
-    private final double GRABBER_DOUBLE = 0.15;
+    private static final double GRABBER_START = 0.025;
+    private static final double GRABBER_SINGLE = GRABBER_START + 0.035;
+    private static final double GRABBER_DOUBLE = GRABBER_START + 0.125;
     private Servo wrist;
-    private final double WRIST_START = 0.013;
-    private final double WRIST_DUMP = 0.27;
+    private static final double WRIST_START = 0.013;
+    private static final double WRIST_DUMP = WRIST_START + 0.257;
+    private static final long SERVO_WAIT_MS = 1000;
+
+    private enum State {
+        INTAKING, // arm down, grabber open, intake on
+        LOWERED, // arm down, grabber closed, intake off
+        RAISIN, // arm up, grabber closed, wrist inwards
+        SCORE_SINGLE, // arm up, grabber single, wrist out
+        SCORE_DOUBLE,
+    }
+
+    private State state;
+    private static final long LIFT_DROP_TIMEOUT_MS = 2000;
+    private static final long LIFT_TICKS_THRESHOLD = 5;
+
+    Runnable runSetIntake(double power) {
+        return () -> intake.setPower(power);
+    }
+
+    private CountDownLatch armTicker;
+    Runnable runDropArm = () -> {
+        for (DcMotor m : arm) {
+            m.setTargetPosition(0);
+            m.setMode(DcMotor.RunMode.RUN_TO_POSITION);
+            m.setPower(1);
+        }
+        long start = System.currentTimeMillis();
+        try {
+            while (Math.abs(arm[0].getCurrentPosition()) >= LIFT_TICKS_THRESHOLD
+                    && Math.abs(arm[1].getCurrentPosition()) >= LIFT_TICKS_THRESHOLD
+                    && System.currentTimeMillis() - start < LIFT_DROP_TIMEOUT_MS) {
+                armTicker.await();
+            }
+        } catch (InterruptedException ignored) {
+        }
+        for (DcMotor m : arm) {
+            m.setPower(0);
+            m.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        }
+    };
+
+    Runnable runSetServo(Servo servo, double position) {
+        return () -> {
+            servo.setPosition(position);
+            try {
+                Thread.sleep(SERVO_WAIT_MS);
+            } catch (InterruptedException ignored) {
+            }
+        };
+    }
+
+    ExecutorService runner;
 
     @Override
     public void init() {
@@ -82,25 +138,29 @@ public class MainTele extends OpMode {
             wheels[i][0] = hardwareMap.get(DcMotor.class, wheelNames[i][0]);
             wheels[i][0].setDirection(DcMotor.Direction.REVERSE);
             wheels[i][0].setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-            // wheels[i][0].setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
 
             wheels[i][1] = hardwareMap.get(DcMotor.class, wheelNames[i][1]);
             wheels[i][1].setDirection(DcMotor.Direction.FORWARD);
             wheels[i][1].setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-            // wheels[i][1].setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
         }
         intake = hardwareMap.get(DcMotor.class, "intake");
         winch = hardwareMap.get(DcMotor.class, "winch");
         arm = new DcMotor[2];
         arm[0] = hardwareMap.get(DcMotor.class, "arm0");
         arm[0].setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        arm[0].setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         arm[1] = hardwareMap.get(DcMotor.class, "arm1");
         arm[1].setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        arm[1].setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         grabber = hardwareMap.get(Servo.class, "grabber");
         grabber.setPosition(GRABBER_START);
         wrist = hardwareMap.get(Servo.class, "wrist");
         wrist.setDirection(Servo.Direction.REVERSE);
         wrist.setPosition(WRIST_START);
+
+        state = State.LOWERED;
+        runner = Executors.newFixedThreadPool(1);
+        armTicker = new CountDownLatch(1);
     }
 
     /*
@@ -119,7 +179,7 @@ public class MainTele extends OpMode {
     }
 
     private double[][] xyrPower(double x, double y, double rot) {
-        return new double[][] {
+        return new double[][]{
                 {x + y + rot, y - x - rot},
                 {y - x + rot, x + y - rot}
         };
@@ -139,12 +199,27 @@ public class MainTele extends OpMode {
         }
     }
 
+    private void setArm() {
+        double armPower = gamepad1.left_stick_y + gamepad2.left_stick_y;
+        if (Math.abs(armPower) < 0.01) {
+            for (DcMotor m : arm) {
+                m.setTargetPosition(m.getCurrentPosition());
+                m.setMode(DcMotor.RunMode.RUN_TO_POSITION);
+                m.setPower(1);
+            }
+        } else {
+            for (DcMotor m : arm) {
+                m.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+                m.setPower(armPower);
+            }
+        }
+    }
+
     /*
      * Code to run REPEATEDLY after the driver hits PLAY but before they hit STOP
      */
     @Override
     public void loop() {
-        double[][] activeScale;
         double pressedX = gamepad1.right_stick_x;
         double pressedY = -gamepad1.right_stick_y;
         // field centric drive
@@ -160,14 +235,78 @@ public class MainTele extends OpMode {
         double rotate = gamepad1.right_trigger - gamepad1.left_trigger;
         powerWheels(xyrPower(adjustedX, adjustedY, rotate));
 
-        double armPower = gamepad1.left_stick_y + gamepad2.left_stick_y;
-        for (DcMotor m : arm) {
-            m.setPower(armPower);
+        telemetry.addData("state", state);
+        armTicker.countDown();
+        armTicker = new CountDownLatch(1);
+        telemetry.addData("arm0Pos", arm[0].getCurrentPosition());
+        telemetry.addData("arm1Pos", arm[1].getCurrentPosition());
+        switch (state) {
+            case LOWERED:
+                if (gamepad1.dpad_up) {
+                    state = State.INTAKING;
+                    runner.submit(runSetIntake(-1));
+                    runner.submit(runSetServo(grabber, GRABBER_DOUBLE));
+                }
+                if (Math.abs(gamepad1.left_stick_y) > JOY_DEADZONE) {
+                    state = State.RAISIN;
+                    runner.submit(runSetServo(grabber, GRABBER_START));
+                }
+                break;
+            case INTAKING:
+                if (gamepad1.dpad_left) {
+                    state = State.LOWERED;
+                    runner.submit(runSetIntake(0));
+                    runner.submit(runSetServo(grabber, GRABBER_START));
+                }
+                if (Math.abs(gamepad1.left_stick_y) > JOY_DEADZONE) {
+                    state = State.RAISIN;
+                    runner.submit(runSetIntake(0));
+                    runner.submit(runSetServo(grabber, GRABBER_START));
+                }
+                break;
+            case RAISIN:
+                setArm();
+                if (gamepad1.dpad_left || gamepad1.dpad_up) {
+                    runner.submit(runDropArm);
+                    if (gamepad1.dpad_left) {
+                        state = State.LOWERED;
+                    } else {
+                        state = State.INTAKING;
+                        runner.submit(runSetIntake(-1));
+                        runner.submit(runSetServo(grabber, GRABBER_DOUBLE));
+                    }
+                } else {
+                    if (gamepad1.x) {
+                        state = State.SCORE_SINGLE;
+                        runner.submit(runSetServo(wrist, WRIST_DUMP));
+                        runner.submit(runSetServo(grabber, GRABBER_SINGLE));
+                    } else if (gamepad1.y) {
+                        state = State.SCORE_DOUBLE;
+                        runner.submit(runSetServo(wrist, WRIST_DUMP));
+                        runner.submit(runSetServo(grabber, GRABBER_DOUBLE));
+                    }
+                }
+                break;
+            case SCORE_SINGLE:
+            case SCORE_DOUBLE:
+                setArm();
+                if (gamepad1.dpad_left) {
+                    state = State.LOWERED;
+                    runner.submit(runSetServo(wrist, WRIST_START));
+                    runner.submit(runSetServo(grabber, GRABBER_START));
+                    runner.submit(runDropArm);
+                } else if (gamepad1.dpad_up) {
+                    state = State.INTAKING;
+                    runner.submit(runSetIntake(-1));
+                    runner.submit(runSetServo(wrist, WRIST_START));
+                    runner.submit(runSetServo(grabber, GRABBER_START));
+                    runner.submit(runDropArm);
+                    runner.submit(runSetServo(grabber, GRABBER_DOUBLE));
+                }
+                break;
         }
-
-        if (gamepad1.dpad_up) {
-            intake.setPower(1);
-        } else if (gamepad1.dpad_left) {
+        /*
+        if (gamepad1.dpad_left) {
             intake.setPower(0);
         } else if (gamepad1.dpad_down) {
             intake.setPower(-1);
@@ -184,6 +323,7 @@ public class MainTele extends OpMode {
         if (gamepad1.x) {
             winch.setPower((gamepad1.dpad_right ? 1 : 0) - (gamepad1.dpad_left ? 1 : 0));
         }
+        */
     }
 
     /*
