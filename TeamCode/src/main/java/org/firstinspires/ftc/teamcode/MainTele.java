@@ -28,7 +28,6 @@ import com.qualcomm.robotcore.hardware.Servo;
 
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 
-import java.util.Queue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -234,6 +233,9 @@ public class MainTele extends OpMode {
         telemetry.addData("adjY", adjustedY);
         double rotate = gamepad1.right_trigger - gamepad1.left_trigger;
         powerWheels(xyrPower(adjustedX, adjustedY, rotate));
+        if (gamepad1.options) {
+            imu.resetYaw();
+        }
 
         telemetry.addData("state", state);
         armTicker.countDown();
@@ -312,18 +314,19 @@ public class MainTele extends OpMode {
             intake.setPower(-1);
         }
 
-        if (gamepad1.options) {
-            imu.resetYaw();
-        }
         if (gamepad1.x) grabber.setPosition(GRABBER_START);
         if (gamepad1.y) grabber.setPosition(GRABBER_SINGLE);
         if (gamepad1.b) grabber.setPosition(GRABBER_DOUBLE);
         if (gamepad1.left_bumper) wrist.setPosition(WRIST_START);
         if (gamepad1.right_bumper) wrist.setPosition(WRIST_DUMP);
-        if (gamepad1.x) {
-            winch.setPower((gamepad1.dpad_right ? 1 : 0) - (gamepad1.dpad_left ? 1 : 0));
-        }
         */
+        if (gamepad1.b) {
+            winch.setPower(-1);
+        } else if (gamepad1.a) {
+            winch.setPower(1);
+        } else {
+            winch.setPower(0);
+        }
     }
 
     /*
