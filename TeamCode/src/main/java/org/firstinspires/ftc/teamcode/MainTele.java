@@ -27,6 +27,7 @@ import com.qualcomm.robotcore.hardware.IMU;
 import com.qualcomm.robotcore.hardware.Servo;
 
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
+import org.firstinspires.ftc.teamcode.drive.SampleMecanumDrive;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -60,7 +61,9 @@ public class MainTele extends OpMode {
     private Servo wrist;
     private static final double WRIST_START = 0.013;
     private static final double WRIST_DUMP = WRIST_START + 0.257;
-    private static final long SERVO_WAIT_MS = 1000;
+    private static final long SERVO_WAIT_SHORT_MS = 300;
+    private static final long SERVO_WAIT_LONG_MS = 750;
+    private static final double STRAFE_MULT = SampleMecanumDrive.LATERAL_MULTIPLIER;
 
     private enum State {
         INTAKING, // arm down, grabber open, intake on
@@ -100,11 +103,11 @@ public class MainTele extends OpMode {
         }
     };
 
-    Runnable runSetServo(Servo servo, double position) {
+    Runnable runSetServo(Servo servo, double position, long wait) {
         return () -> {
             servo.setPosition(position);
             try {
-                Thread.sleep(SERVO_WAIT_MS);
+                Thread.sleep(wait);
             } catch (InterruptedException ignored) {
             }
         };
@@ -178,6 +181,7 @@ public class MainTele extends OpMode {
     }
 
     private double[][] xyrPower(double x, double y, double rot) {
+        x *= STRAFE_MULT;
         return new double[][]{
                 {x + y + rot, y - x - rot},
                 {y - x + rot, x + y - rot}
@@ -247,23 +251,23 @@ public class MainTele extends OpMode {
                 if (gamepad1.dpad_up) {
                     state = State.INTAKING;
                     runner.submit(runSetIntake(-1));
-                    runner.submit(runSetServo(grabber, GRABBER_DOUBLE));
+                    runner.submit(runSetServo(grabber, GRABBER_DOUBLE, SERVO_WAIT_SHORT_MS));
                 }
                 if (Math.abs(gamepad1.left_stick_y) > JOY_DEADZONE) {
                     state = State.RAISIN;
-                    runner.submit(runSetServo(grabber, GRABBER_START));
+                    runner.submit(runSetServo(grabber, GRABBER_START, SERVO_WAIT_SHORT_MS));
                 }
                 break;
             case INTAKING:
                 if (gamepad1.dpad_left) {
                     state = State.LOWERED;
                     runner.submit(runSetIntake(0));
-                    runner.submit(runSetServo(grabber, GRABBER_START));
+                    runner.submit(runSetServo(grabber, GRABBER_START, SERVO_WAIT_SHORT_MS));
                 }
                 if (Math.abs(gamepad1.left_stick_y) > JOY_DEADZONE) {
                     state = State.RAISIN;
                     runner.submit(runSetIntake(0));
-                    runner.submit(runSetServo(grabber, GRABBER_START));
+                    runner.submit(runSetServo(grabber, GRABBER_START, SERVO_WAIT_SHORT_MS));
                 }
                 break;
             case RAISIN:
@@ -275,17 +279,17 @@ public class MainTele extends OpMode {
                     } else {
                         state = State.INTAKING;
                         runner.submit(runSetIntake(-1));
-                        runner.submit(runSetServo(grabber, GRABBER_DOUBLE));
+                        runner.submit(runSetServo(grabber, GRABBER_DOUBLE, SERVO_WAIT_SHORT_MS));
                     }
                 } else {
                     if (gamepad1.x) {
                         state = State.SCORE_SINGLE;
-                        runner.submit(runSetServo(wrist, WRIST_DUMP));
-                        runner.submit(runSetServo(grabber, GRABBER_SINGLE));
+                        runner.submit(runSetServo(wrist, WRIST_DUMP, 0));
+                        runner.submit(runSetServo(grabber, GRABBER_SINGLE, SERVO_WAIT_LONG_MS));
                     } else if (gamepad1.y) {
                         state = State.SCORE_DOUBLE;
-                        runner.submit(runSetServo(wrist, WRIST_DUMP));
-                        runner.submit(runSetServo(grabber, GRABBER_DOUBLE));
+                        runner.submit(runSetServo(wrist, WRIST_DUMP, 0));
+                        runner.submit(runSetServo(grabber, GRABBER_DOUBLE, SERVO_WAIT_LONG_MS));
                     }
                 }
                 break;
@@ -294,16 +298,16 @@ public class MainTele extends OpMode {
                 setArm();
                 if (gamepad1.dpad_left) {
                     state = State.LOWERED;
-                    runner.submit(runSetServo(wrist, WRIST_START));
-                    runner.submit(runSetServo(grabber, GRABBER_START));
+                    runner.submit(runSetServo(wrist, WRIST_START, 0));
+                    runner.submit(runSetServo(grabber, GRABBER_START, SERVO_WAIT_LONG_MS));
                     runner.submit(runDropArm);
                 } else if (gamepad1.dpad_up) {
                     state = State.INTAKING;
                     runner.submit(runSetIntake(-1));
-                    runner.submit(runSetServo(wrist, WRIST_START));
-                    runner.submit(runSetServo(grabber, GRABBER_START));
+                    runner.submit(runSetServo(wrist, WRIST_START, 0));
+                    runner.submit(runSetServo(grabber, GRABBER_START, SERVO_WAIT_LONG_MS));
                     runner.submit(runDropArm);
-                    runner.submit(runSetServo(grabber, GRABBER_DOUBLE));
+                    runner.submit(runSetServo(grabber, GRABBER_DOUBLE, SERVO_WAIT_SHORT_MS));
                 }
                 break;
         }
