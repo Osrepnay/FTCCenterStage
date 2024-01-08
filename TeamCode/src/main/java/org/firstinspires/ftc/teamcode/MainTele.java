@@ -24,14 +24,9 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.Blinker;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.IMU;
-import com.qualcomm.robotcore.hardware.Servo;
 
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.teamcode.drive.SampleMecanumDrive;
-
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 /**
  * This file contains an example of an iterative (Non-Linear) "OpMode".
@@ -51,69 +46,9 @@ public class MainTele extends OpMode {
     Blinker controlHub;
     IMU imu;
     private DcMotor[][] wheels;
-    private DcMotor intake;
     private DcMotor winch;
-    private DcMotor[] arm;
-    private Servo grabber;
-    private static final double GRABBER_START = 0.025;
-    private static final double GRABBER_SINGLE = GRABBER_START + 0.035;
-    private static final double GRABBER_DOUBLE = GRABBER_START + 0.125;
-    private Servo wrist;
-    private static final double WRIST_START = 0.013;
-    private static final double WRIST_DUMP = WRIST_START + 0.257;
-    private static final long SERVO_WAIT_SHORT_MS = 300;
-    private static final long SERVO_WAIT_LONG_MS = 750;
+    private StateManager stateManager;
     private static final double STRAFE_MULT = SampleMecanumDrive.LATERAL_MULTIPLIER;
-
-    private enum State {
-        INTAKING, // arm down, grabber open, intake on
-        LOWERED, // arm down, grabber closed, intake off
-        RAISIN, // arm up, grabber closed, wrist inwards
-        SCORE_SINGLE, // arm up, grabber single, wrist out
-        SCORE_DOUBLE,
-    }
-
-    private State state;
-    private static final long LIFT_DROP_TIMEOUT_MS = 2000;
-    private static final long LIFT_TICKS_THRESHOLD = 5;
-
-    Runnable runSetIntake(double power) {
-        return () -> intake.setPower(power);
-    }
-
-    private CountDownLatch armTicker;
-    Runnable runDropArm = () -> {
-        for (DcMotor m : arm) {
-            m.setTargetPosition(0);
-            m.setMode(DcMotor.RunMode.RUN_TO_POSITION);
-            m.setPower(1);
-        }
-        long start = System.currentTimeMillis();
-        try {
-            while (Math.abs(arm[0].getCurrentPosition()) >= LIFT_TICKS_THRESHOLD
-                    && Math.abs(arm[1].getCurrentPosition()) >= LIFT_TICKS_THRESHOLD
-                    && System.currentTimeMillis() - start < LIFT_DROP_TIMEOUT_MS) {
-                armTicker.await();
-            }
-        } catch (InterruptedException ignored) {
-        }
-        for (DcMotor m : arm) {
-            m.setPower(0);
-            m.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-        }
-    };
-
-    Runnable runSetServo(Servo servo, double position, long wait) {
-        return () -> {
-            servo.setPosition(position);
-            try {
-                Thread.sleep(wait);
-            } catch (InterruptedException ignored) {
-            }
-        };
-    }
-
-    ExecutorService runner;
 
     @Override
     public void init() {
@@ -145,24 +80,8 @@ public class MainTele extends OpMode {
             wheels[i][1].setDirection(DcMotor.Direction.FORWARD);
             wheels[i][1].setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         }
-        intake = hardwareMap.get(DcMotor.class, "intake");
         winch = hardwareMap.get(DcMotor.class, "winch");
-        arm = new DcMotor[2];
-        arm[0] = hardwareMap.get(DcMotor.class, "arm0");
-        arm[0].setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
-        arm[0].setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-        arm[1] = hardwareMap.get(DcMotor.class, "arm1");
-        arm[1].setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
-        arm[1].setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-        grabber = hardwareMap.get(Servo.class, "grabber");
-        grabber.setPosition(GRABBER_START);
-        wrist = hardwareMap.get(Servo.class, "wrist");
-        wrist.setDirection(Servo.Direction.REVERSE);
-        wrist.setPosition(WRIST_START);
-
-        state = State.LOWERED;
-        runner = Executors.newFixedThreadPool(1);
-        armTicker = new CountDownLatch(1);
+        stateManager = new StateManager(hardwareMap, telemetry);
     }
 
     /*
@@ -203,28 +122,36 @@ public class MainTele extends OpMode {
     }
 
     private void setArm() {
-        double armPower = gamepad1.left_stick_y + gamepad2.left_stick_y;
-        if (Math.abs(armPower) < 0.01) {
-            for (DcMotor m : arm) {
-                m.setTargetPosition(m.getCurrentPosition());
-                m.setMode(DcMotor.RunMode.RUN_TO_POSITION);
-                m.setPower(1);
-            }
+        double armPower = -(gamepad1.left_stick_y + gamepad2.left_stick_y);
+    }
+
+    private double scaleMagnitude(double magnitude) {
+        double slowMax = 0.4;
+        double slowRegion = 0.8;
+        if (magnitude <= slowRegion) {
+            return slowMax / slowRegion * magnitude;
         } else {
-            for (DcMotor m : arm) {
-                m.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-                m.setPower(armPower);
-            }
+            return (1 - slowMax) / (1 - slowRegion) * (magnitude - slowRegion) + slowMax;
         }
     }
 
     /*
      * Code to run REPEATEDLY after the driver hits PLAY but before they hit STOP
      */
+    private boolean leftTriggerPressable = true;
+    private boolean rightTriggerPressable = true;
+    private int count;
     @Override
     public void loop() {
         double pressedX = gamepad1.right_stick_x;
         double pressedY = -gamepad1.right_stick_y;
+        // change power curve while maintaining relative power
+        double pressedMagnitude = scaleMagnitude(Math.sqrt(pressedX * pressedX + pressedY * pressedY));
+        telemetry.addData("magnitude", pressedMagnitude);
+        telemetry.addData("lske", pressedX * pressedX + pressedY * pressedY);
+        double pressedAngle = Math.atan2(pressedY, pressedX);
+        pressedX = Math.cos(pressedAngle) * pressedMagnitude;
+        pressedY = Math.sin(pressedAngle) * pressedMagnitude;
         // field centric drive
         // https://matthew-brett.github.io/teaching/rotation_2d.html
         double yaw = -imu.getRobotYawPitchRollAngles().getYaw(AngleUnit.RADIANS);
@@ -241,75 +168,35 @@ public class MainTele extends OpMode {
             imu.resetYaw();
         }
 
-        telemetry.addData("state", state);
-        armTicker.countDown();
-        armTicker = new CountDownLatch(1);
-        telemetry.addData("arm0Pos", arm[0].getCurrentPosition());
-        telemetry.addData("arm1Pos", arm[1].getCurrentPosition());
-        switch (state) {
-            case LOWERED:
-                if (gamepad1.dpad_up) {
-                    state = State.INTAKING;
-                    runner.submit(runSetIntake(-1));
-                    runner.submit(runSetServo(grabber, GRABBER_DOUBLE, SERVO_WAIT_SHORT_MS));
-                }
-                if (Math.abs(gamepad1.left_stick_y) > JOY_DEADZONE) {
-                    state = State.RAISIN;
-                    runner.submit(runSetServo(grabber, GRABBER_START, SERVO_WAIT_SHORT_MS));
-                }
-                break;
-            case INTAKING:
-                if (gamepad1.dpad_left) {
-                    state = State.LOWERED;
-                    runner.submit(runSetIntake(0));
-                    runner.submit(runSetServo(grabber, GRABBER_START, SERVO_WAIT_SHORT_MS));
-                }
-                if (Math.abs(gamepad1.left_stick_y) > JOY_DEADZONE) {
-                    state = State.RAISIN;
-                    runner.submit(runSetIntake(0));
-                    runner.submit(runSetServo(grabber, GRABBER_START, SERVO_WAIT_SHORT_MS));
-                }
-                break;
-            case RAISIN:
-                setArm();
-                if (gamepad1.dpad_left || gamepad1.dpad_up) {
-                    runner.submit(runDropArm);
-                    if (gamepad1.dpad_left) {
-                        state = State.LOWERED;
-                    } else {
-                        state = State.INTAKING;
-                        runner.submit(runSetIntake(-1));
-                        runner.submit(runSetServo(grabber, GRABBER_DOUBLE, SERVO_WAIT_SHORT_MS));
-                    }
-                } else {
-                    if (gamepad1.x) {
-                        state = State.SCORE_SINGLE;
-                        runner.submit(runSetServo(wrist, WRIST_DUMP, 0));
-                        runner.submit(runSetServo(grabber, GRABBER_SINGLE, SERVO_WAIT_LONG_MS));
-                    } else if (gamepad1.y) {
-                        state = State.SCORE_DOUBLE;
-                        runner.submit(runSetServo(wrist, WRIST_DUMP, 0));
-                        runner.submit(runSetServo(grabber, GRABBER_DOUBLE, SERVO_WAIT_LONG_MS));
-                    }
-                }
-                break;
-            case SCORE_SINGLE:
-            case SCORE_DOUBLE:
-                setArm();
-                if (gamepad1.dpad_left) {
-                    state = State.LOWERED;
-                    runner.submit(runSetServo(wrist, WRIST_START, 0));
-                    runner.submit(runSetServo(grabber, GRABBER_START, SERVO_WAIT_LONG_MS));
-                    runner.submit(runDropArm);
-                } else if (gamepad1.dpad_up) {
-                    state = State.INTAKING;
-                    runner.submit(runSetIntake(-1));
-                    runner.submit(runSetServo(wrist, WRIST_START, 0));
-                    runner.submit(runSetServo(grabber, GRABBER_START, SERVO_WAIT_LONG_MS));
-                    runner.submit(runDropArm);
-                    runner.submit(runSetServo(grabber, GRABBER_DOUBLE, SERVO_WAIT_SHORT_MS));
-                }
-                break;
+        stateManager.update();
+        telemetry.addData("state", stateManager.state);
+        if (gamepad1.dpad_down) {
+            stateManager.queueState(StateManager.State.LOWERED);
+        }
+        if (gamepad1.dpad_up) {
+            stateManager.queueState(StateManager.State.INTAKING);
+        }
+        if (gamepad1.x) {
+            stateManager.queueState(StateManager.State.SCORE_SINGLE);
+        }
+        if (gamepad1.y) {
+            stateManager.queueState(StateManager.State.SCORE_DOUBLE);
+        }
+        if (gamepad1.left_bumper) {
+            if (leftTriggerPressable) {
+                stateManager.lowerArm();
+                leftTriggerPressable = false;
+            }
+        } else {
+            leftTriggerPressable = true;
+        }
+        if (gamepad1.right_bumper) {
+            if (rightTriggerPressable) {
+                stateManager.raiseArm();
+                rightTriggerPressable = false;
+            }
+        } else {
+            rightTriggerPressable = true;
         }
         /*
         if (gamepad1.dpad_left) {
