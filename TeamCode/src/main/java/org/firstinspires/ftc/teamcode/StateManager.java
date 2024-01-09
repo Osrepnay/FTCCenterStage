@@ -16,6 +16,7 @@ import java.util.Queue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class StateManager {
     HardwareMap hardwareMap;
@@ -29,11 +30,11 @@ public class StateManager {
     static final long LIFT_TICKS_THRESHOLD = 5;
     static final int LIFT_PIXEL_TICKS = 217;
     static final int LIFT_LOWEST_SCORE_TICKS = 1083 - LIFT_PIXEL_TICKS;
-    static final double GRABBER_START = 0.025;
-    static final double GRABBER_SINGLE = GRABBER_START + 0.0262;
-    static final double GRABBER_DOUBLE = GRABBER_START + 0.125;
+    static final double GRABBER_START = 0.029;
+    static final double GRABBER_SINGLE = GRABBER_START + 0.0232;
+    static final double GRABBER_DOUBLE = GRABBER_START + 0.122;
     static final double WRIST_START = 0.008;
-    static final double WRIST_DUMP = WRIST_START + 0.257;
+    static final double WRIST_DUMP = WRIST_START + 0.26;
     static final long SERVO_WAIT_SHORT_MS = 150;
     static final long SERVO_WAIT_LONG_MS = 300;
 
@@ -56,7 +57,10 @@ public class StateManager {
         }
     }
 
-    private int armPixelsHigh = 1;
+    private AtomicInteger armPixelsHigh = new AtomicInteger(1);
+    private int armTicks() {
+        return Math.max(0, armPixelsHigh.get()) * LIFT_PIXEL_TICKS + LIFT_LOWEST_SCORE_TICKS;
+    }
 
     public State state = State.LOWERED;
     private Queue<State> futureStates = new LinkedList<>();
@@ -64,7 +68,10 @@ public class StateManager {
     private ExecutorService runner = Executors.newFixedThreadPool(1);
     private final Integer ticker = 0;
 
-    private void waitToArmIdle() {
+    private void setArmBlocking(int position) {
+        for (DcMotor m : arm) {
+            m.setTargetPosition(position);
+        }
         long start = System.currentTimeMillis();
         try {
             while (Arrays.stream(arm)
@@ -73,6 +80,13 @@ public class StateManager {
                     && System.currentTimeMillis() - start < LIFT_DROP_TIMEOUT_MS) {
                 synchronized (ticker) {
                     ticker.wait();
+                }
+            }
+            // take the opportunity to recalibrate encoders
+            if (position == 0) {
+                for (DcMotor m : arm) {
+                    m.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+                    m.setMode(DcMotor.RunMode.RUN_TO_POSITION);
                 }
             }
         } catch (InterruptedException ignored) {}
@@ -137,17 +151,12 @@ public class StateManager {
             intake.setPower(-1);
             setServoBlocking(grabber, GRABBER_DOUBLE, SERVO_WAIT_SHORT_MS);
         });
-        targets.put(State.RAISIN, () -> {
-            if (armPixelsHigh < 1) {
-                armPixelsHigh = 1;
-            }
-            waitToArmIdle();
-        });
+        targets.put(State.RAISIN, () -> setArmBlocking(armTicks()));
         transitions.put(State.LOWERED, targets);
 
         targets = new EnumMap<>(State.class);
         targets.put(State.RAISIN, () -> {});
-        targets.put(State.LOWERED, this::waitToArmIdle);
+        targets.put(State.LOWERED, () -> setArmBlocking(0));
         targets.put(State.SCORE_SINGLE, () -> {
             setServoBlocking(wrist, WRIST_DUMP, SERVO_WAIT_LONG_MS);
             setServoBlocking(grabber, GRABBER_SINGLE, SERVO_WAIT_SHORT_MS);
@@ -224,7 +233,7 @@ public class StateManager {
         if (state.isArmDown()) {
             queueState(State.RAISIN);
         } else {
-            armPixelsHigh++;
+            armPixelsHigh.incrementAndGet();
         }
     }
 
@@ -232,10 +241,8 @@ public class StateManager {
         if (state.isArmDown()) {
             queueState(State.RAISIN);
         } else {
-            if (armPixelsHigh <= 1) {
+            if (armPixelsHigh.getAndUpdate(x -> x <= 1 ? 1 : x - 1) <= 1) {
                 queueState(State.LOWERED);
-            } else {
-                armPixelsHigh--;
             }
         }
     }
@@ -250,13 +257,11 @@ public class StateManager {
         Runnable transition = transitions.get(state).get(nextState);
         state = nextState;
         telemetry.addData("busy", isBusy());
-        int targetPos = state.isArmDown()
-                ? 0
-                : armPixelsHigh == 0
-                ? 0
-                : armPixelsHigh * LIFT_PIXEL_TICKS + LIFT_LOWEST_SCORE_TICKS;
-        for (DcMotor m : arm) {
-            m.setTargetPosition(targetPos);
+        if (!isBusy() && !state.isArmDown()) {
+            int targetPos = armTicks();
+            for (DcMotor m : arm) {
+                m.setTargetPosition(targetPos);
+            }
         }
         // this has to go after motor set target positions
         // otherwise waitToIdle on the arm finishes too fast because the target position is old
