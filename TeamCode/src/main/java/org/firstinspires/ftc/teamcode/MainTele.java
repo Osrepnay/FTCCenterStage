@@ -141,10 +141,11 @@ public class MainTele extends OpMode {
     private boolean leftTriggerPressable = true;
     private boolean rightTriggerPressable = true;
     private int count;
+    private boolean backPressed = false;
     @Override
     public void loop() {
-        double pressedX = gamepad1.right_stick_x;
-        double pressedY = -gamepad1.right_stick_y;
+        double pressedX = gamepad1.right_stick_x + gamepad2.right_stick_x;
+        double pressedY = -(gamepad1.right_stick_y + gamepad2.right_stick_y);
         // change power curve while maintaining relative power
         double pressedMagnitude = scaleMagnitude(Math.sqrt(pressedX * pressedX + pressedY * pressedY));
         telemetry.addData("magnitude", pressedMagnitude);
@@ -162,7 +163,7 @@ public class MainTele extends OpMode {
         double adjustedY = yawSin * pressedX + yawCos * pressedY;
         telemetry.addData("adjX", adjustedX);
         telemetry.addData("adjY", adjustedY);
-        double rotate = gamepad1.right_trigger - gamepad1.left_trigger;
+        double rotate = gamepad1.right_trigger - gamepad1.left_trigger + gamepad2.right_trigger - gamepad2.left_trigger;
         powerWheels(xyrPower(adjustedX, adjustedY, rotate));
         if (gamepad1.options) {
             imu.resetYaw();
@@ -217,6 +218,14 @@ public class MainTele extends OpMode {
             winch.setPower(1);
         } else {
             winch.setPower(0);
+        }
+        // TODO INSANELY HACKY
+        if (gamepad1.back) {
+            stateManager.intake.setPower(1);
+            backPressed = true;
+        } else if (backPressed) {
+            backPressed = false;
+            stateManager.intake.setPower(0);
         }
     }
 

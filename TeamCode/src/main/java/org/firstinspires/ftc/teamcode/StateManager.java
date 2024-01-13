@@ -1,6 +1,7 @@
 package org.firstinspires.ftc.teamcode;
 
 import com.qualcomm.robotcore.hardware.DcMotor;
+import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 import com.qualcomm.robotcore.hardware.Servo;
@@ -22,14 +23,16 @@ public class StateManager {
     HardwareMap hardwareMap;
     Telemetry telemetry;
 
-    private DcMotor intake;
-    private DcMotor[] arm;
+    DcMotor intake;
+    private DcMotorEx[] arm;
     private Servo grabber;
     private Servo wrist;
     static final long LIFT_DROP_TIMEOUT_MS = 2000;
     static final long LIFT_TICKS_THRESHOLD = 5;
     static final int LIFT_PIXEL_TICKS = 217;
     static final int LIFT_LOWEST_SCORE_TICKS = 1083 - LIFT_PIXEL_TICKS;
+    static final double LIFT_HOLDING_POWER = 0.05;
+    static final double LIFT_MOVING_POWER = 0.5;
     static final double GRABBER_START = 0.029;
     static final double GRABBER_SINGLE = GRABBER_START + 0.0232;
     static final double GRABBER_DOUBLE = GRABBER_START + 0.122;
@@ -57,9 +60,13 @@ public class StateManager {
         }
     }
 
-    private AtomicInteger armPixelsHigh = new AtomicInteger(1);
+    private AtomicInteger armPixelsHigh = new AtomicInteger(2);
+    public int armTicksOverride = -1;
+
     private int armTicks() {
-        return Math.max(0, armPixelsHigh.get()) * LIFT_PIXEL_TICKS + LIFT_LOWEST_SCORE_TICKS;
+        return armTicksOverride == -1
+                ? Math.max(0, armPixelsHigh.get()) * LIFT_PIXEL_TICKS + LIFT_LOWEST_SCORE_TICKS
+                : armTicksOverride;
     }
 
     public State state = State.LOWERED;
@@ -68,25 +75,32 @@ public class StateManager {
     private ExecutorService runner = Executors.newFixedThreadPool(1);
     private final Integer ticker = 0;
 
+    private boolean isArmBusy() {
+        return Arrays.stream(arm)
+                .allMatch(m -> Math.abs(m.getCurrentPosition() - m.getTargetPosition())
+                        >= LIFT_TICKS_THRESHOLD);
+    }
+
     private void setArmBlocking(int position) {
         for (DcMotor m : arm) {
             m.setTargetPosition(position);
+            m.setPower(LIFT_MOVING_POWER);
         }
         long start = System.currentTimeMillis();
         try {
-            while (Arrays.stream(arm)
-                    .allMatch(m -> Math.abs(m.getCurrentPosition() - m.getTargetPosition())
-                            >= LIFT_TICKS_THRESHOLD)
-                    && System.currentTimeMillis() - start < LIFT_DROP_TIMEOUT_MS) {
+            while (isArmBusy() && System.currentTimeMillis() - start < LIFT_DROP_TIMEOUT_MS) {
                 synchronized (ticker) {
                     ticker.wait();
                 }
             }
-            // take the opportunity to recalibrate encoders
-            if (position == 0) {
-                for (DcMotor m : arm) {
+            for (DcMotor m : arm) {
+                if (position == 0) {
+                    // take the opportunity to recalibrate encoders
                     m.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
                     m.setMode(DcMotor.RunMode.RUN_TO_POSITION);
+                    m.setPower(LIFT_HOLDING_POWER); // TODO fix motor fighting
+                } else {
+                    m.setPower(LIFT_HOLDING_POWER);
                 }
             }
         } catch (InterruptedException ignored) {}
@@ -115,16 +129,17 @@ public class StateManager {
 
         intake = hardwareMap.get(DcMotor.class, "intake");
 
-        arm = new DcMotor[2];
-        arm[0] = hardwareMap.get(DcMotor.class, "arm0");
-        arm[1] = hardwareMap.get(DcMotor.class, "arm1");
-        for (DcMotor m : arm) {
+        arm = new DcMotorEx[2];
+        arm[0] = hardwareMap.get(DcMotorEx.class, "arm0");
+        arm[1] = hardwareMap.get(DcMotorEx.class, "arm1");
+        for (DcMotorEx m : arm) {
             m.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
             m.setDirection(DcMotorSimple.Direction.REVERSE);
             m.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
             m.setTargetPosition(0);
             m.setMode(DcMotor.RunMode.RUN_TO_POSITION);
-            m.setPower(1);
+            m.setPower(LIFT_HOLDING_POWER);
+            m.setTargetPositionTolerance((int) LIFT_TICKS_THRESHOLD);
         }
 
         grabber = hardwareMap.get(Servo.class, "grabber");
@@ -238,9 +253,7 @@ public class StateManager {
     }
 
     public void lowerArm() {
-        if (state.isArmDown()) {
-            queueState(State.RAISIN);
-        } else {
+        if (!state.isArmDown()) {
             if (armPixelsHigh.getAndUpdate(x -> x <= 1 ? 1 : x - 1) <= 1) {
                 queueState(State.LOWERED);
             }
@@ -248,6 +261,10 @@ public class StateManager {
     }
 
     public void update() {
+        telemetry.addData("arm0At", arm[0].getCurrentPosition());
+        telemetry.addData("arm1At", arm[1].getCurrentPosition());
+        telemetry.addData("arm0", arm[0].getTargetPosition());
+        telemetry.addData("arm1", arm[1].getTargetPosition());
         State nextState = state;
         boolean changed = false;
         if (!futureStates.isEmpty() && !isBusy()) {
@@ -259,8 +276,10 @@ public class StateManager {
         telemetry.addData("busy", isBusy());
         if (!isBusy() && !state.isArmDown()) {
             int targetPos = armTicks();
+            boolean busy = isArmBusy();
             for (DcMotor m : arm) {
                 m.setTargetPosition(targetPos);
+                m.setPower(busy ? LIFT_MOVING_POWER : LIFT_HOLDING_POWER);
             }
         }
         // this has to go after motor set target positions
