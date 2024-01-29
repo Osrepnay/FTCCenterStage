@@ -29,9 +29,10 @@ public class Auto extends OpMode {
     private enum AutoState {
         TO_SPIKE(0, 0),
         DROP_PURPLE(-1, 1000),
-        TO_BACKDROP(1, 0),
+        STOP_PURPLE_DROP(-1, 0),
+        TO_BACKDROP(-1, 0),
         DROP_YELLOW(-1, 1000),
-        PARK(2, 0);
+        PARK(-1, 0);
         public final int pathIdx;
         public final long minTime;
         private static final AutoState[] vals = values();
@@ -71,12 +72,19 @@ public class Auto extends OpMode {
     private final boolean IS_RED = true;
 
     // frormular: x * 23.563 + 11.781, y * 23.563 + 11.781 for tile
+    private double flipDirection(double rad) {
+        if (IS_RED) {
+            return rad;
+        } else {
+            return 2 * Math.PI - rad;
+        }
+    }
 
     private Pose2d flipPose(Pose2d pose) {
         if (IS_RED) {
             return pose;
         } else {
-            return new Pose2d(pose.getX(), -pose.getY(), 2 * Math.PI - pose.getHeading());
+            return new Pose2d(pose.getX(), -pose.getY(), flipDirection(pose.getHeading()));
         }
     }
 
@@ -108,47 +116,55 @@ public class Auto extends OpMode {
         paths = new EnumMap<>(Propecessor.Spike.class);
         List<TrajectorySequence> spikePaths = new ArrayList<>();
         spikePaths.add(drive.trajectorySequenceBuilder(startPoseCorrected)
-                .splineToConstantHeading(flipVector(new Vector2d(-37.719, -55)), Math.toRadians(90))
-                .splineToSplineHeading(flipPose(new Pose2d(-35.344, -31.244, Math.toRadians(180))), Math.toRadians(100))
-                .build());
-        spikePaths.add(drive.trajectorySequenceBuilder(spikePaths.get(spikePaths.size() - 1).end())
-                .splineToConstantHeading(flipVector(new Vector2d(-35.344, -35.344)), Math.toRadians(-10))
-                .splineToConstantHeading(flipVector(new Vector2d(15, -31.244)), Math.toRadians(0))
-                .splineToSplineHeading(flipPose(new Pose2d(47.126, -35.344 + 6, Math.toRadians(0))), Math.toRadians(0))
+                .setReversed(true)
+                .splineToConstantHeading(flipVector(new Vector2d(-37.719, -55)), flipDirection(Math.toRadians(90)))
+                .splineToSplineHeading(flipPose(new Pose2d(-34.5, -29.5, Math.toRadians(0))), flipDirection(Math.toRadians(80)))
+                .setReversed(false)
                 .build());
         spikePaths.add(drive.trajectorySequenceBuilder(spikePaths.get(spikePaths.size() - 1).end())
                 .setReversed(true)
-                .splineTo(flipVector(new Vector2d(54, -58.907)), 0)
+                .lineToConstantHeading(flipVector(new Vector2d(-35.344, -58.907)))
+                .lineToConstantHeading(flipVector(new Vector2d(15, -58)))
+                .splineToSplineHeading(flipPose(new Pose2d(47.126, -35.344 + 6, Math.toRadians(0))), flipDirection(Math.toRadians(0)))
+                .setReversed(false)
+                .build());
+        spikePaths.add(drive.trajectorySequenceBuilder(spikePaths.get(spikePaths.size() - 1).end())
+                .setReversed(true)
+                .splineTo(flipVector(new Vector2d(63, -58.907)), flipDirection(0))
                 .build());
         paths.put(Propecessor.Spike.LEFT, spikePaths);
         spikePaths = new ArrayList<>();
         spikePaths.add(drive.trajectorySequenceBuilder(startPoseCorrected)
-                .splineToConstantHeading(flipVector(new Vector2d(-37.719, -55)), Math.toRadians(90))
-                .splineToSplineHeading(flipPose(new Pose2d(-35.344, -31.244, Math.toRadians(0))), Math.toRadians(80))
+                .setReversed(true)
+                .splineToConstantHeading(flipVector(new Vector2d(-37.719, -55)), flipDirection(Math.toRadians(90)))
+                .splineToSplineHeading(flipPose(new Pose2d(-36, -29.5, Math.toRadians(180))), flipDirection(Math.toRadians(80)))
+                .setReversed(false)
                 .build());
         spikePaths.add(drive.trajectorySequenceBuilder(spikePaths.get(spikePaths.size() - 1).end())
-                .splineToConstantHeading(flipVector(new Vector2d(-32, -35.344)), Math.toRadians(-10))
-                .splineToConstantHeading(flipVector(new Vector2d(15, -35.344)), Math.toRadians(0))
-                .splineToSplineHeading(flipPose(new Pose2d(47.126, -35.344 + 6, Math.toRadians(0))), Math.toRadians(0))
+                .splineToConstantHeading(flipVector(new Vector2d(-35.344, -58.907)), flipDirection(Math.toRadians(0)))
+                .lineToConstantHeading(flipVector(new Vector2d(15, -58.907)))
+                .splineToSplineHeading(flipPose(new Pose2d(47.126, -35.344 - 6, Math.toRadians(0))), flipDirection(Math.toRadians(0)))
                 .build());
         spikePaths.add(drive.trajectorySequenceBuilder(spikePaths.get(spikePaths.size() - 1).end())
                 .setReversed(true)
-                .splineTo(flipVector(new Vector2d(54, -58.907)), 0)
+                .splineTo(flipVector(new Vector2d(63, -58.907)), flipDirection(Math.toRadians(0)))
                 .build());
         paths.put(Propecessor.Spike.RIGHT, spikePaths);
         spikePaths = new ArrayList<>();
         spikePaths.add(drive.trajectorySequenceBuilder(startPoseCorrected)
-                .splineToConstantHeading(flipVector(new Vector2d(-37.719, -55)), Math.toRadians(90))
-                .splineToSplineHeading(flipPose(new Pose2d(-35.344, -35.344, Math.toRadians(90))), Math.toRadians(90))
+                .setReversed(true)
+                .splineToConstantHeading(flipVector(new Vector2d(-37.719, -55)), flipDirection(Math.toRadians(90)))
+                .splineToSplineHeading(flipPose(new Pose2d(-35.344, -32, Math.toRadians(-90))), flipDirection(Math.toRadians(80)))
+                .setReversed(false)
                 .build());
         spikePaths.add(drive.trajectorySequenceBuilder(spikePaths.get(spikePaths.size() - 1).end())
-                .splineToLinearHeading(flipPose(new Pose2d(-33, -35.344, Math.toRadians(0))), Math.toRadians(0))
-                .splineToConstantHeading(flipVector(new Vector2d(15, -35.344)), Math.toRadians(0))
-                .splineToSplineHeading(flipPose(new Pose2d(47.126, -35.344 + 6, Math.toRadians(0))), Math.toRadians(0))
+                .splineToSplineHeading(flipPose(new Pose2d(-40, -58.907, Math.toRadians(0))), flipDirection(Math.toRadians(-90)))
+                .lineToConstantHeading(flipVector(new Vector2d(15, -58.907)))
+                .splineToSplineHeading(flipPose(new Pose2d(47.126, -35.344, Math.toRadians(0))), flipDirection(Math.toRadians(90)))
                 .build());
         spikePaths.add(drive.trajectorySequenceBuilder(spikePaths.get(spikePaths.size() - 1).end())
                 .setReversed(true)
-                .splineTo(flipVector(new Vector2d(54, -58.907)), 0)
+                .splineTo(flipVector(new Vector2d(63, -58.907)), flipDirection(Math.toRadians(0)))
                 .build());
         paths.put(Propecessor.Spike.CENTER, spikePaths);
     }
@@ -157,6 +173,12 @@ public class Auto extends OpMode {
     public void start() {
         // portal.stopStreaming();
         chosenPaths = paths.get(processor.selectedSpike);
+        // TODO HACK
+        try {
+            Thread.sleep(0);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
         // TODO technically bad; this shouldn't know what TO_SPIKE is
         drive.followTrajectorySequenceAsync(chosenPaths.get(0));
     }
@@ -180,11 +202,15 @@ public class Auto extends OpMode {
                     } else {
                         switch (autoState) {
                             case DROP_PURPLE:
-                                stateManager.queueState(StateManager.State.RAISIN);
-                                stateManager.armTicksOverride = 1000;
+                                /*stateManager.queueState(StateManager.State.RAISIN);
+                                stateManager.armTicksOverride = 610;
                                 stateManager.queueState(StateManager.State.SCORE_SINGLE);
                                 stateManager.armTicksOverride = -1;
-                                stateManager.queueState(StateManager.State.LOWERED);
+                                stateManager.queueState(StateManager.State.LOWERED);*/
+                                stateManager.intake.setPower(0.2);
+                                break;
+                            case STOP_PURPLE_DROP:
+                                stateManager.intake.setPower(0);
                                 break;
                             case DROP_YELLOW:
                                 stateManager.raiseArm();
@@ -192,7 +218,7 @@ public class Auto extends OpMode {
                                 stateManager.queueState(StateManager.State.LOWERED);
                                 break;
                             default:
-                                throw new IllegalStateException("unknown nonpath: " + autoState);
+                                // throw new IllegalStateException("unknown nonpath: " + autoState);
                         }
                         stateManager.update();
                     }

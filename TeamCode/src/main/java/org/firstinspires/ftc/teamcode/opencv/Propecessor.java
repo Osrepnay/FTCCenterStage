@@ -44,10 +44,17 @@ public class Propecessor implements VisionProcessor {
 
     @Override
     public void init(int width, int height, CameraCalibration calibration) {
-        leftXRange = new Range(120, 235);
-        leftHeight = 120;
-        centerXRange = new Range(440, 545);
-        centerHeight = 110;
+        if (isRed) {
+            leftXRange = new Range(120, 235);
+            leftHeight = 120;
+            centerXRange = new Range(440, 545);
+            centerHeight = 110;
+        } else {
+            leftXRange = new Range(0, 115);
+            leftHeight = 120;
+            centerXRange = new Range(335, 440);
+            centerHeight = 110;
+        }
     }
 
     private Mat.Tuple2<Double> processSide(Mat subframe, int sectionHeight) {

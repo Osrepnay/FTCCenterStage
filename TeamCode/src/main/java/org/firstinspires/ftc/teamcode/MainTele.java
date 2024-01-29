@@ -24,6 +24,7 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.Blinker;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.IMU;
+import com.qualcomm.robotcore.hardware.Servo;
 
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.teamcode.drive.SampleMecanumDrive;
@@ -47,8 +48,11 @@ public class MainTele extends OpMode {
     IMU imu;
     private DcMotor[][] wheels;
     private DcMotor winch;
+    private Servo launch;
     private StateManager stateManager;
     private static final double STRAFE_MULT = SampleMecanumDrive.LATERAL_MULTIPLIER;
+    private static final double LAUNCH_START = 0;
+    private static final double LAUNCH_LAUNCH = LAUNCH_START + 0.5;
 
     @Override
     public void init() {
@@ -82,6 +86,9 @@ public class MainTele extends OpMode {
         }
         winch = hardwareMap.get(DcMotor.class, "winch");
         stateManager = new StateManager(hardwareMap, telemetry);
+        launch = hardwareMap.get(Servo.class, "launch");
+        launch.setDirection(Servo.Direction.REVERSE);
+        launch.setPosition(LAUNCH_START);
     }
 
     /*
@@ -226,6 +233,10 @@ public class MainTele extends OpMode {
         } else if (backPressed) {
             backPressed = false;
             stateManager.intake.setPower(0);
+        }
+
+        if (gamepad1.ps) {
+            launch.setPosition(LAUNCH_LAUNCH);
         }
     }
 
