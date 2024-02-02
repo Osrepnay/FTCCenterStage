@@ -114,6 +114,8 @@ public class MainTele extends OpMode {
         };
     }
 
+    private double wheelPowerScale = 1;
+
     private void powerWheels(double[][] power) {
         double normFac = 1;
         for (int i = 0; i < wheels.length; i++) {
@@ -123,7 +125,7 @@ public class MainTele extends OpMode {
         }
         for (int i = 0; i < wheels.length; i++) {
             for (int j = 0; j < wheels[i].length; j++) {
-                wheels[i][j].setPower(power[i][j]);
+                wheels[i][j].setPower(power[i][j] / normFac * wheelPowerScale);
             }
         }
     }
@@ -237,6 +239,12 @@ public class MainTele extends OpMode {
 
         if (gamepad1.ps) {
             launch.setPosition(LAUNCH_LAUNCH);
+        }
+
+        if (gamepad2.dpad_up) {
+            wheelPowerScale = 1;
+        } else if (gamepad1.dpad_down) {
+            wheelPowerScale = 0.1;
         }
     }
 
