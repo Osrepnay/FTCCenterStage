@@ -26,12 +26,21 @@ public class Propecessor implements VisionProcessor {
     int leftHeight;
     Range centerXRange;
     int centerHeight;
-    public boolean isRed = false;
+    public boolean robotAlignLeft = false;
+    public boolean isRed = true;
     public double detectThreshold = 50;
     public double unsavoryChannelFactor = 0.5;
 
     public enum Spike {
-        LEFT, CENTER, RIGHT
+        LEFT, CENTER, RIGHT;
+        public Spike mirror() {
+            switch (this) {
+                case LEFT: return RIGHT;
+                case CENTER: return CENTER;
+                case RIGHT: return LEFT;
+            }
+            throw new IllegalStateException("poop");
+        }
     }
 
     public Spike selectedSpike;
@@ -44,15 +53,15 @@ public class Propecessor implements VisionProcessor {
 
     @Override
     public void init(int width, int height, CameraCalibration calibration) {
-        if (isRed) {
-            leftXRange = new Range(120, 235);
+        if (robotAlignLeft) {
+            leftXRange = new Range(170, 285);
             leftHeight = 120;
-            centerXRange = new Range(440, 545);
+            centerXRange = new Range(490, 595);
             centerHeight = 110;
         } else {
             leftXRange = new Range(0, 115);
             leftHeight = 120;
-            centerXRange = new Range(335, 440);
+            centerXRange = new Range(390, 495);
             centerHeight = 110;
         }
     }
@@ -84,12 +93,12 @@ public class Propecessor implements VisionProcessor {
         Mat.Tuple2<Double> centerRes = processSide(frame.submat(new Rect(centerXRange.start, 0, centerXRange.size(), frame.height())).clone(), centerHeight);
         double avgCenter = centerRes.get_0();
         spikeLocCenter = new Rect(centerXRange.start, (int) (double) centerRes.get_1(), centerXRange.size(), centerHeight);
-        telemetry.addData("left", avgLeft);
-        telemetry.addData("center", avgCenter);
+        // telemetry.addData("left", avgLeft);
+        // telemetry.addData("center", avgCenter);
         Spike select;
         if (avgLeft > detectThreshold) {
             if (avgCenter > detectThreshold) {
-                telemetry.addLine("BAD BAD: BOTH SELECTS OVER THRESHOLD, ASSUME CENTER");
+                // telemetry.addLine("BAD BAD: BOTH SELECTS OVER THRESHOLD, ASSUME CENTER");
                 select = Spike.CENTER;
             } else {
                 select = Spike.LEFT;
@@ -101,8 +110,8 @@ public class Propecessor implements VisionProcessor {
                 select = Spike.RIGHT;
             }
         }
-        telemetry.addData("spike", select);
-        telemetry.update();
+        // telemetry.addData("spike", select);
+        // telemetry.update();
         return select;
     }
 
@@ -117,6 +126,7 @@ public class Propecessor implements VisionProcessor {
     @Override
     public void onDrawFrame(Canvas canvas, int onscreenWidth, int onscreenHeight, float scaleBmpPxToCanvasPx, float scaleCanvasDensity, Object userContext) {
         selectedSpike = (Spike) userContext;
+        telemetry.addData("spike", selectedSpike);
         Paint paint = new Paint();
         paint.setColor(Color.GREEN);
         paint.setStyle(Paint.Style.STROKE);

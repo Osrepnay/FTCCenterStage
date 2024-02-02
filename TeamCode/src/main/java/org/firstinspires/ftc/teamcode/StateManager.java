@@ -30,10 +30,10 @@ public class StateManager {
     static final long LIFT_DROP_TIMEOUT_MS = 2000;
     static final long LIFT_TICKS_THRESHOLD = 5;
     static final int LIFT_PIXEL_TICKS = 217;
-    static final int LIFT_LOWEST_SCORE_TICKS = 1083 - LIFT_PIXEL_TICKS;
+    static final int LIFT_LOWEST_SCORE_TICKS = 1140 - LIFT_PIXEL_TICKS;
     static final double LIFT_HOLDING_POWER = 0.05;
     static final double LIFT_MOVING_POWER = 0.5;
-    static final double GRABBER_START = 0.029;
+    static final double GRABBER_START = 0.0295;
     static final double GRABBER_SINGLE = GRABBER_START + 0.0232;
     static final double GRABBER_DOUBLE = GRABBER_START + 0.122;
     static final double WRIST_START = 0.008;
@@ -60,7 +60,7 @@ public class StateManager {
         }
     }
 
-    private AtomicInteger armPixelsHigh = new AtomicInteger(2);
+    private AtomicInteger armPixelsHigh = new AtomicInteger(1);
     public int armTicksOverride = -1;
 
     private int armTicks() {
@@ -96,7 +96,8 @@ public class StateManager {
             for (DcMotor m : arm) {
                 if (position == 0) {
                     // take the opportunity to recalibrate encoders
-                    m.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+                    // TODO PEE
+                    // m.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
                     m.setMode(DcMotor.RunMode.RUN_TO_POSITION);
                     m.setPower(LIFT_HOLDING_POWER); // TODO fix motor fighting
                 } else {
@@ -129,9 +130,9 @@ public class StateManager {
 
         intake = hardwareMap.get(DcMotor.class, "intake");
 
-        arm = new DcMotorEx[2];
+        arm = new DcMotorEx[1];
         arm[0] = hardwareMap.get(DcMotorEx.class, "arm0");
-        arm[1] = hardwareMap.get(DcMotorEx.class, "arm1");
+        // arm[1] = hardwareMap.get(DcMotorEx.class, "arm1");
         for (DcMotorEx m : arm) {
             m.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
             m.setDirection(DcMotorSimple.Direction.REVERSE);
@@ -262,9 +263,9 @@ public class StateManager {
 
     public void update() {
         telemetry.addData("arm0At", arm[0].getCurrentPosition());
-        telemetry.addData("arm1At", arm[1].getCurrentPosition());
+        // telemetry.addData("arm1At", arm[1].getCurrentPosition());
         telemetry.addData("arm0", arm[0].getTargetPosition());
-        telemetry.addData("arm1", arm[1].getTargetPosition());
+        // telemetry.addData("arm1", arm[1].getTargetPosition());
         State nextState = state;
         boolean changed = false;
         if (!futureStates.isEmpty() && !isBusy()) {
