@@ -56,7 +56,6 @@ public class MainTele extends OpMode {
 
     @Override
     public void init() {
-        telemetry.addData("Status", "Initialized");
         controlHub = hardwareMap.get(Blinker.class, "Control Hub");
         imu = hardwareMap.get(IMU.class, "imu");
         imu.initialize(
@@ -89,6 +88,9 @@ public class MainTele extends OpMode {
         launch = hardwareMap.get(Servo.class, "launch");
         launch.setDirection(Servo.Direction.REVERSE);
         launch.setPosition(LAUNCH_START);
+        gamepad1.reset();
+        gamepad2.reset();
+        telemetry.addData("Status", "Initialized");
     }
 
     /*
@@ -114,7 +116,7 @@ public class MainTele extends OpMode {
         };
     }
 
-    private double wheelPowerScale = 1;
+    private double wheelPowerClamp = 1;
 
     private void powerWheels(double[][] power) {
         double normFac = 1;
@@ -125,7 +127,7 @@ public class MainTele extends OpMode {
         }
         for (int i = 0; i < wheels.length; i++) {
             for (int j = 0; j < wheels[i].length; j++) {
-                wheels[i][j].setPower(power[i][j] / normFac * wheelPowerScale);
+                wheels[i][j].setPower(power[i][j] / normFac);
             }
         }
     }
@@ -135,8 +137,8 @@ public class MainTele extends OpMode {
     }
 
     private double scaleMagnitude(double magnitude) {
-        double slowMax = 0.4;
-        double slowRegion = 0.8;
+        double slowMax = 0.3;
+        double slowRegion = 0.9;
         if (magnitude <= slowRegion) {
             return slowMax / slowRegion * magnitude;
         } else {
@@ -155,8 +157,15 @@ public class MainTele extends OpMode {
     public void loop() {
         double pressedX = gamepad1.right_stick_x + gamepad2.right_stick_x;
         double pressedY = -(gamepad1.right_stick_y + gamepad2.right_stick_y);
+        telemetry.addData("pressedX", gamepad1.right_stick_x);
+        telemetry.addData("pressedY", gamepad1.right_stick_y);
         // change power curve while maintaining relative power
-        double pressedMagnitude = scaleMagnitude(Math.sqrt(pressedX * pressedX + pressedY * pressedY));
+        double magnitudeRaw = Math.sqrt(pressedX * pressedX + pressedY * pressedY);
+        telemetry.addData("raw", magnitudeRaw);
+        double pressedMagnitude = scaleMagnitude(magnitudeRaw);
+        if (pressedMagnitude > wheelPowerClamp) {
+            pressedMagnitude = wheelPowerClamp;
+        }
         telemetry.addData("magnitude", pressedMagnitude);
         telemetry.addData("lske", pressedX * pressedX + pressedY * pressedY);
         double pressedAngle = Math.atan2(pressedY, pressedX);
@@ -170,11 +179,9 @@ public class MainTele extends OpMode {
         double yawSin = Math.sin(yaw);
         double adjustedX = yawCos * pressedX - yawSin * pressedY;
         double adjustedY = yawSin * pressedX + yawCos * pressedY;
-        telemetry.addData("adjX", adjustedX);
-        telemetry.addData("adjY", adjustedY);
         double rotate = gamepad1.right_trigger - gamepad1.left_trigger + gamepad2.right_trigger - gamepad2.left_trigger;
         powerWheels(xyrPower(adjustedX, adjustedY, rotate));
-        if (gamepad1.options) {
+        if (gamepad1.options || gamepad2.options) {
             imu.resetYaw();
         }
 
@@ -241,10 +248,10 @@ public class MainTele extends OpMode {
             launch.setPosition(LAUNCH_LAUNCH);
         }
 
-        if (gamepad2.dpad_up) {
-            wheelPowerScale = 1;
-        } else if (gamepad1.dpad_down) {
-            wheelPowerScale = 0.1;
+        if (gamepad1.dpad_right) {
+            wheelPowerClamp = 1;
+        } else if (gamepad1.dpad_left) {
+            wheelPowerClamp = 0.3;
         }
     }
 

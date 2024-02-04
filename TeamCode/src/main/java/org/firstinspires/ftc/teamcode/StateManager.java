@@ -30,7 +30,7 @@ public class StateManager {
     static final long LIFT_DROP_TIMEOUT_MS = 2000;
     static final long LIFT_TICKS_THRESHOLD = 5;
     static final int LIFT_PIXEL_TICKS = 217;
-    static final int LIFT_LOWEST_SCORE_TICKS = 1140 - LIFT_PIXEL_TICKS;
+    static final int LIFT_LOWEST_SCORE_TICKS = 1160 - LIFT_PIXEL_TICKS;
     static final double LIFT_HOLDING_POWER = 0.05;
     static final double LIFT_MOVING_POWER = 0.5;
     static final double GRABBER_START = 0.0295;

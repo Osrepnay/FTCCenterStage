@@ -35,5 +35,13 @@ public class LiftTester extends OpMode {
     public void loop() {
         telemetry.addData("arm0", arm0.getCurrentPosition());
         telemetry.addData("arm1", arm1.getCurrentPosition());
+        telemetry.addData("x right 1", gamepad1.right_stick_x);
+        telemetry.addData("y right 1", gamepad1.right_stick_y);
+        telemetry.addData("x left 1", gamepad1.left_stick_x);
+        telemetry.addData("y left 1", gamepad1.left_stick_y);
+        telemetry.addData("x right 2", gamepad2.right_stick_x);
+        telemetry.addData("y right 2", gamepad2.right_stick_y);
+        telemetry.addData("x left 2", gamepad2.left_stick_x);
+        telemetry.addData("y left 2", gamepad2.left_stick_y);
     }
 }

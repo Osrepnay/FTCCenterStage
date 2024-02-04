@@ -36,7 +36,7 @@ public class Auto extends OpMode {
         RAISE_YELLOW(-1, 2000),
         DROP_YELLOW(-1, 2000),
         RETRACT_YELLOW(-1, 500),
-        PARK(2, 0);
+        PARK(-1, 0);
         public final int pathIdx;
         public final long minTime;
         private static final AutoState[] vals = values();
@@ -292,6 +292,7 @@ public class Auto extends OpMode {
                                 stateManager.intake.setPower(0);
                                 break;
                             case RAISE_YELLOW:
+                                stateManager.raiseArm();
                                 stateManager.raiseArm();
                                 break;
                             case DROP_YELLOW:
