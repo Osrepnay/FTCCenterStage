@@ -77,11 +77,11 @@ public class MainTele extends OpMode {
             // left wheel turns back when motor turning clockwise
             wheels[i][0] = hardwareMap.get(DcMotor.class, wheelNames[i][0]);
             wheels[i][0].setDirection(DcMotor.Direction.REVERSE);
-            wheels[i][0].setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+            wheels[i][0].setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
 
             wheels[i][1] = hardwareMap.get(DcMotor.class, wheelNames[i][1]);
             wheels[i][1].setDirection(DcMotor.Direction.FORWARD);
-            wheels[i][1].setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+            wheels[i][1].setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
         }
         winch = hardwareMap.get(DcMotor.class, "winch");
         stateManager = new StateManager(hardwareMap, telemetry);
