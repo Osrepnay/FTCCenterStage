@@ -13,7 +13,7 @@ import org.opencv.core.Mat;
 import org.opencv.core.Point;
 import org.opencv.core.Range;
 import org.opencv.core.Rect;
-import org.opencv.core.Scalar;
+import org.opencv.core.Size;
 import org.opencv.imgproc.Imgproc;
 
 import java.util.ArrayList;
@@ -71,7 +71,17 @@ public class Propecessor implements VisionProcessor {
         }
     }
 
-    private Mat.Tuple2<Double> processSide(Mat subframe, int sectionWidth, int sectionHeight) {
+    class Tuple<A, B> {
+        A first;
+        B second;
+
+        public Tuple(A first, B second) {
+            this.first = first;
+            this.second = second;
+        }
+    }
+
+    private Tuple<Double, Point> processSide(Mat subframe, int sectionWidth, int sectionHeight) {
         List<Mat> channels = new ArrayList<>();
         Core.split(subframe, channels);
         // put coi at first position
@@ -82,37 +92,37 @@ public class Propecessor implements VisionProcessor {
         }
         // roi so the kernels don't go out of bounds
         Rect roi = new Rect(0, 0, subframe.width() - sectionWidth + 1, subframe.height() - sectionHeight + 1);
-        Mat kernel = new Mat(sectionHeight, sectionWidth, CvType.CV_64F,
-                new Scalar(1.0 / sectionWidth / sectionHeight * unsavoryChannelFactor));
-        Imgproc.filter2D(new Mat(channels.get(1), roi), channels.get(1), CvType.CV_64F, kernel, new Point(0, 0), 0,
-                Core.BORDER_CONSTANT);
-        Imgproc.filter2D(new Mat(channels.get(2), roi), channels.get(2), CvType.CV_64F, kernel, new Point(0, 0), 0,
-                Core.BORDER_CONSTANT);
-        kernel.setTo(new Scalar(1.0 / sectionWidth / sectionHeight));
-        Imgproc.filter2D(new Mat(channels.get(0), roi), channels.get(0), CvType.CV_64F, kernel, new Point(0, 0), 0,
-                Core.BORDER_CONSTANT);
+        Size size = new Size(sectionWidth, sectionHeight);
+        for (int i = 0; i < channels.size(); i++) {
+            double scale = i == 0 ? 1 : unsavoryChannelFactor;
+            channels.get(i).convertTo(channels.get(i), CvType.CV_64F, scale);
+            Imgproc.boxFilter(new Mat(channels.get(i), roi), channels.get(i), -1, size, new Point(0, 0), true);
+        }
         Core.subtract(channels.get(0), channels.get(1), channels.get(0));
         Core.subtract(channels.get(0), channels.get(2), channels.get(0));
         Core.MinMaxLocResult res = Core.minMaxLoc(channels.get(0));
-        return new Mat.Tuple2<>(res.maxVal, res.maxLoc.y);
+        return new Tuple<>(res.maxVal, res.maxLoc);
     }
 
     @Override
     public Object processFrame(Mat frame, long captureTimeNanos) {
         telemetry.addLine("test");
-        Mat.Tuple2<Double> leftRes = processSide(frame.submat(
+        Tuple<Double, Point> leftRes = processSide(frame.submat(
                         new Rect(Math.max(0, leftXRange.start - horizontalTolerance), 0,
                                 leftXRange.size() + 2 * horizontalTolerance, frame.height())).clone(),
                 leftXRange.size(), leftHeight);
-        double avgLeft = leftRes.get_0();
-        spikeLocLeft = new Rect(leftXRange.start, (int) (double) leftRes.get_1(), leftXRange.size(), leftHeight);
-        Mat.Tuple2<Double> centerRes = processSide(frame.submat(
+        double avgLeft = leftRes.first;
+        spikeLocLeft = new Rect(
+                (int) leftRes.second.x + leftXRange.start - horizontalTolerance, (int) leftRes.second.y,
+                leftXRange.size(), leftHeight);
+        Tuple<Double, Point> centerRes = processSide(frame.submat(
                         new Rect(Math.max(0, centerXRange.start - horizontalTolerance), 0,
                                 centerXRange.size() + 2 * horizontalTolerance, frame.height())).clone(),
                 centerXRange.size(), centerHeight);
-        double avgCenter = centerRes.get_0();
-        spikeLocCenter = new Rect(centerXRange.start, (int) (double) centerRes.get_1(), centerXRange.size(),
-                centerHeight);
+        double avgCenter = centerRes.first;
+        spikeLocCenter = new Rect(
+                (int) centerRes.second.x + centerXRange.start - horizontalTolerance, (int) centerRes.second.y,
+                centerXRange.size(), centerHeight);
         telemetry.addData("left", avgLeft);
         telemetry.addData("center", avgCenter);
         Spike select;
