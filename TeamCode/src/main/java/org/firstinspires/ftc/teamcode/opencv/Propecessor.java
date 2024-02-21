@@ -26,6 +26,7 @@ public class Propecessor implements VisionProcessor {
     int leftHeight;
     Range centerXRange;
     int centerHeight;
+    public int horizontalTolerance = 30;
     public boolean robotAlignLeft = false;
     public boolean isRed = true;
     public double detectThreshold = 50;
@@ -33,11 +34,15 @@ public class Propecessor implements VisionProcessor {
 
     public enum Spike {
         LEFT, CENTER, RIGHT;
+
         public Spike mirror() {
             switch (this) {
-                case LEFT: return RIGHT;
-                case CENTER: return CENTER;
-                case RIGHT: return LEFT;
+                case LEFT:
+                    return RIGHT;
+                case CENTER:
+                    return CENTER;
+                case RIGHT:
+                    return LEFT;
             }
             throw new IllegalStateException("poop");
         }
@@ -66,19 +71,26 @@ public class Propecessor implements VisionProcessor {
         }
     }
 
-    private Mat.Tuple2<Double> processSide(Mat subframe, int sectionHeight) {
+    private Mat.Tuple2<Double> processSide(Mat subframe, int sectionWidth, int sectionHeight) {
         List<Mat> channels = new ArrayList<>();
         Core.split(subframe, channels);
         // put coi at first position
         if (!isRed) {
-            channels.add(0, channels.get(2));
+            Mat red = channels.get(0);
+            channels.set(0, channels.get(2));
+            channels.set(2, red);
         }
-        Rect roi = new Rect(subframe.width() / 2, sectionHeight / 2, 1, subframe.height() - sectionHeight);
-        Mat kernel = new Mat(sectionHeight, subframe.width(), CvType.CV_64F, new Scalar(1.0 / subframe.width() / sectionHeight * unsavoryChannelFactor));
-        Imgproc.filter2D(new Mat(channels.get(1), roi), channels.get(1), CvType.CV_64F, kernel, new Point(-1, -1), 0, Core.BORDER_CONSTANT);
-        Imgproc.filter2D(new Mat(channels.get(2), roi), channels.get(2), CvType.CV_64F, kernel, new Point(-1, -1), 0, Core.BORDER_CONSTANT);
-        kernel.setTo(new Scalar(1.0 / subframe.width() / sectionHeight));
-        Imgproc.filter2D(new Mat(channels.get(0), roi), channels.get(0), CvType.CV_64F, kernel, new Point(-1, -1), 0, Core.BORDER_CONSTANT);
+        // roi so the kernels don't go out of bounds
+        Rect roi = new Rect(0, 0, subframe.width() - sectionWidth + 1, subframe.height() - sectionHeight + 1);
+        Mat kernel = new Mat(sectionHeight, sectionWidth, CvType.CV_64F,
+                new Scalar(1.0 / sectionWidth / sectionHeight * unsavoryChannelFactor));
+        Imgproc.filter2D(new Mat(channels.get(1), roi), channels.get(1), CvType.CV_64F, kernel, new Point(0, 0), 0,
+                Core.BORDER_CONSTANT);
+        Imgproc.filter2D(new Mat(channels.get(2), roi), channels.get(2), CvType.CV_64F, kernel, new Point(0, 0), 0,
+                Core.BORDER_CONSTANT);
+        kernel.setTo(new Scalar(1.0 / sectionWidth / sectionHeight));
+        Imgproc.filter2D(new Mat(channels.get(0), roi), channels.get(0), CvType.CV_64F, kernel, new Point(0, 0), 0,
+                Core.BORDER_CONSTANT);
         Core.subtract(channels.get(0), channels.get(1), channels.get(0));
         Core.subtract(channels.get(0), channels.get(2), channels.get(0));
         Core.MinMaxLocResult res = Core.minMaxLoc(channels.get(0));
@@ -87,18 +99,25 @@ public class Propecessor implements VisionProcessor {
 
     @Override
     public Object processFrame(Mat frame, long captureTimeNanos) {
-        Mat.Tuple2<Double> leftRes = processSide(frame.submat(new Rect(leftXRange.start, 0, leftXRange.size(), frame.height())).clone(), leftHeight);
+        telemetry.addLine("test");
+        Mat.Tuple2<Double> leftRes = processSide(frame.submat(
+                        new Rect(Math.max(0, leftXRange.start - horizontalTolerance), 0,
+                                leftXRange.size() + 2 * horizontalTolerance, frame.height())).clone(),
+                leftXRange.size(), leftHeight);
         double avgLeft = leftRes.get_0();
         spikeLocLeft = new Rect(leftXRange.start, (int) (double) leftRes.get_1(), leftXRange.size(), leftHeight);
-        Mat.Tuple2<Double> centerRes = processSide(frame.submat(new Rect(centerXRange.start, 0, centerXRange.size(), frame.height())).clone(), centerHeight);
+        Mat.Tuple2<Double> centerRes = processSide(frame.submat(
+                        new Rect(Math.max(0, centerXRange.start - horizontalTolerance), 0,
+                                centerXRange.size() + 2 * horizontalTolerance, frame.height())).clone(),
+                centerXRange.size(), centerHeight);
         double avgCenter = centerRes.get_0();
-        spikeLocCenter = new Rect(centerXRange.start, (int) (double) centerRes.get_1(), centerXRange.size(), centerHeight);
-        // telemetry.addData("left", avgLeft);
-        // telemetry.addData("center", avgCenter);
+        spikeLocCenter = new Rect(centerXRange.start, (int) (double) centerRes.get_1(), centerXRange.size(),
+                centerHeight);
+        telemetry.addData("left", avgLeft);
+        telemetry.addData("center", avgCenter);
         Spike select;
         if (avgLeft > detectThreshold) {
             if (avgCenter > detectThreshold) {
-                // telemetry.addLine("BAD BAD: BOTH SELECTS OVER THRESHOLD, ASSUME CENTER");
                 select = Spike.CENTER;
             } else {
                 select = Spike.LEFT;
@@ -110,8 +129,6 @@ public class Propecessor implements VisionProcessor {
                 select = Spike.RIGHT;
             }
         }
-        // telemetry.addData("spike", select);
-        // telemetry.update();
         return select;
     }
 
@@ -124,15 +141,18 @@ public class Propecessor implements VisionProcessor {
     }
 
     @Override
-    public void onDrawFrame(Canvas canvas, int onscreenWidth, int onscreenHeight, float scaleBmpPxToCanvasPx, float scaleCanvasDensity, Object userContext) {
+    public void onDrawFrame(Canvas canvas, int onscreenWidth, int onscreenHeight, float scaleBmpPxToCanvasPx,
+                            float scaleCanvasDensity, Object userContext) {
         selectedSpike = (Spike) userContext;
         telemetry.addData("spike", selectedSpike);
         Paint paint = new Paint();
         paint.setColor(Color.GREEN);
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeWidth(5);
-        canvas.drawRect(convertRects(scaleRect(new Rect(leftXRange.start, 0, leftXRange.size(), 480), scaleBmpPxToCanvasPx)), paint);
-        canvas.drawRect(convertRects(scaleRect(new Rect(centerXRange.start, 0, centerXRange.size(), 480), scaleBmpPxToCanvasPx)), paint);
+        canvas.drawRect(convertRects(scaleRect(new Rect(leftXRange.start - horizontalTolerance, 0,
+                leftXRange.size() + 2 * horizontalTolerance, 480), scaleBmpPxToCanvasPx)), paint);
+        canvas.drawRect(convertRects(scaleRect(new Rect(centerXRange.start - horizontalTolerance, 0,
+                centerXRange.size() + 2 * horizontalTolerance, 480), scaleBmpPxToCanvasPx)), paint);
         paint.setColor(Color.RED);
         canvas.drawRect(convertRects(scaleRect(spikeLocLeft, scaleBmpPxToCanvasPx)), paint);
         canvas.drawRect(convertRects(scaleRect(spikeLocCenter, scaleBmpPxToCanvasPx)), paint);
