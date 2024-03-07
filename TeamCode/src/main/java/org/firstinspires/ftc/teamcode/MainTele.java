@@ -76,12 +76,13 @@ public class MainTele extends OpMode {
         for (int i = 0; i < wheelNames.length; i++) {
             // left wheel turns back when motor turning clockwise
             wheels[i][0] = hardwareMap.get(DcMotor.class, wheelNames[i][0]);
-            wheels[i][0].setDirection(DcMotor.Direction.REVERSE);
             wheels[i][0].setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
 
             wheels[i][1] = hardwareMap.get(DcMotor.class, wheelNames[i][1]);
-            wheels[i][1].setDirection(DcMotor.Direction.FORWARD);
             wheels[i][1].setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
+
+            wheels[i][0].setDirection(DcMotor.Direction.REVERSE);
+            wheels[i][1].setDirection(DcMotor.Direction.FORWARD);
         }
         winch = hardwareMap.get(DcMotor.class, "winch");
         stateManager = new StateManager(hardwareMap, telemetry);
@@ -137,8 +138,8 @@ public class MainTele extends OpMode {
     }
 
     private double scaleMagnitude(double magnitude) {
-        double slowMax = 0.3;
-        double slowRegion = 0.9;
+        double slowMax = 0.4;
+        double slowRegion = 0.6;
         if (magnitude <= slowRegion) {
             return slowMax / slowRegion * magnitude;
         } else {

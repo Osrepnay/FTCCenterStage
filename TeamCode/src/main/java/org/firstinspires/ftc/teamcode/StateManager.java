@@ -32,7 +32,7 @@ public class StateManager {
     static final int LIFT_PIXEL_TICKS = 217;
     static final int LIFT_LOWEST_SCORE_TICKS = 1160 - LIFT_PIXEL_TICKS;
     static final double LIFT_HOLDING_POWER = 0.05;
-    static final double LIFT_MOVING_POWER = 0.5;
+    static final double LIFT_MOVING_POWER = 1;
     static final double GRABBER_START = 0.0295;
     static final double GRABBER_SINGLE = GRABBER_START + 0.0232;
     static final double GRABBER_DOUBLE = GRABBER_START + 0.122;
