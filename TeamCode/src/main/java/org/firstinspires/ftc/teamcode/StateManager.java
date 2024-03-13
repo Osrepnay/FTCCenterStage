@@ -8,16 +8,13 @@ import com.qualcomm.robotcore.hardware.Servo;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
 
+import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.EnumMap;
-import java.util.LinkedList;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Queue;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.UnaryOperator;
 
 public class StateManager {
     HardwareMap hardwareMap;
@@ -27,6 +24,7 @@ public class StateManager {
     private DcMotorEx[] arm;
     private Servo grabber;
     private Servo wrist;
+    private Servo intakeLift;
     static final long LIFT_DROP_TIMEOUT_MS = 2000;
     static final long LIFT_TICKS_THRESHOLD = 5;
     static final int LIFT_PIXEL_TICKS = 217;
@@ -41,6 +39,19 @@ public class StateManager {
     static final long SERVO_WAIT_SHORT_MS = 150;
     static final long SERVO_WAIT_LONG_MS = 300;
 
+    static final double INTAKE_LIFT_FLAT = 0;
+    static final double INTAKE_LIFT_POS_PER_RAD = 11.5 / 36 / (Math.PI / 2);
+    static final double PIXEL_HEIGHT_RATIO = 0.5 / (172 / 25.4);
+    static final double[] INTAKE_LIFT_POSITIONS = {
+            INTAKE_LIFT_FLAT + INTAKE_LIFT_POS_PER_RAD * (Math.asin(PIXEL_HEIGHT_RATIO * 0) - 0.05),
+            INTAKE_LIFT_FLAT + INTAKE_LIFT_POS_PER_RAD * (Math.asin(PIXEL_HEIGHT_RATIO * 1) - 0.05),
+            INTAKE_LIFT_FLAT + INTAKE_LIFT_POS_PER_RAD * (Math.asin(PIXEL_HEIGHT_RATIO * 2) - 0.05),
+            INTAKE_LIFT_FLAT + INTAKE_LIFT_POS_PER_RAD * (Math.asin(PIXEL_HEIGHT_RATIO * 3) - 0.05),
+            INTAKE_LIFT_FLAT + INTAKE_LIFT_POS_PER_RAD * (Math.asin(PIXEL_HEIGHT_RATIO * 4) - 0.05),
+            INTAKE_LIFT_FLAT + INTAKE_LIFT_POS_PER_RAD * (Math.asin(PIXEL_HEIGHT_RATIO * 5) - 0.05),
+            INTAKE_LIFT_FLAT + INTAKE_LIFT_POS_PER_RAD * (Math.PI / 2)
+    };
+
     /*
         INTAKING - LOWERED
                       |
@@ -48,6 +59,95 @@ public class StateManager {
          \                       /
           -----------------------
     */
+
+    public static class StateProps {
+        public enum WristState {
+            WRIST_IN, WRIST_OUT
+        }
+
+        public enum GrabberState {
+            GRABBER_GRAB, GRABBER_ONE, GRABBER_TWO
+        }
+
+        public double intakePower;
+        public int liftHeight;
+        public WristState wristState;
+        public GrabberState grabberState;
+        public int extendoIdx;
+
+        public StateProps(double intakePower, int liftHeight, WristState wristState, GrabberState grabberState,
+                          int extendoIdx) {
+            this.intakePower = intakePower;
+            this.liftHeight = liftHeight;
+            this.wristState = wristState;
+            this.grabberState = grabberState;
+            this.extendoIdx = extendoIdx;
+        }
+    }
+
+    private int liftTicks(int liftHeight) {
+        return liftHeight == 0 ? 0 : liftHeight * LIFT_PIXEL_TICKS + LIFT_LOWEST_SCORE_TICKS;
+    }
+
+    private Runnable transitionProps(StateProps from, StateProps to) {
+        Runnable run = () -> {};
+        // collapse bucket while going down or up
+        if (from.liftHeight == 0 && to.liftHeight != 0
+                || from.liftHeight != 0 && to.liftHeight == 0) {
+            run = sequence(run, () -> {
+                setServoBlocking(wrist, WRIST_START, 0);
+                setServoBlocking(grabber, GRABBER_START, SERVO_WAIT_LONG_MS);
+            });
+        }
+        if (from.liftHeight != to.liftHeight) {
+            run = sequence(run, () -> setArmBlocking(liftTicks(to.liftHeight)));
+        }
+        if (from.wristState != to.wristState) {
+            double wristPos;
+            switch (to.wristState) {
+                case WRIST_IN:
+                    wristPos = WRIST_START;
+                    break;
+                case WRIST_OUT:
+                    wristPos = WRIST_DUMP;
+                    break;
+                default:
+                    throw new IllegalStateException("didn't catch " + to.wristState);
+            }
+            run = sequence(run, () -> setServoBlocking(wrist, wristPos, SERVO_WAIT_LONG_MS));
+        }
+        if (from.grabberState != to.grabberState) {
+            double grabberPos;
+            switch (to.grabberState) {
+                case GRABBER_GRAB:
+                    grabberPos = GRABBER_START;
+                    break;
+                case GRABBER_ONE:
+                    grabberPos = GRABBER_SINGLE;
+                    break;
+                case GRABBER_TWO:
+                    grabberPos = GRABBER_DOUBLE;
+                    break;
+                default:
+                    throw new IllegalStateException("didn't catch " + to.grabberState);
+            }
+            run = sequence(run, () -> setServoBlocking(grabber, grabberPos, SERVO_WAIT_SHORT_MS));
+        }
+        if (from.intakePower != to.intakePower) {
+            run = sequence(run, () -> intake.setPower(to.intakePower));
+        }
+        if (from.extendoIdx != to.extendoIdx) {
+            run = sequence(run, () -> intakeLift.setPosition(INTAKE_LIFT_POSITIONS[to.extendoIdx]));
+        }
+        return run;
+    }
+
+    public void propsTo(UnaryOperator<StateProps> change) {
+        StateProps to = change.apply(stateProps);
+        runner.submit(transitionProps(stateProps, to));
+        stateProps = to;
+    }
+
     public enum State {
         INTAKING,
         LOWERED,
@@ -55,23 +155,32 @@ public class StateManager {
         SCORE_SINGLE,
         SCORE_DOUBLE;
 
-        public boolean isArmDown() {
-            return this == INTAKING || this == LOWERED;
+        public StateProps props() {
+            switch (this) {
+                case INTAKING:
+                    return new StateProps(-1, 0, StateProps.WristState.WRIST_IN, StateProps.GrabberState.GRABBER_TWO,
+                            INTAKE_LIFT_POSITIONS.length - 1);
+                case LOWERED:
+                    return new StateProps(0, 0, StateProps.WristState.WRIST_IN, StateProps.GrabberState.GRABBER_GRAB,
+                            INTAKE_LIFT_POSITIONS.length - 1);
+                case RAISIN:
+                    return new StateProps(0, 1, StateProps.WristState.WRIST_OUT, StateProps.GrabberState.GRABBER_GRAB
+                            , INTAKE_LIFT_POSITIONS.length - 1);
+                case SCORE_SINGLE:
+                    return new StateProps(0, 1, StateProps.WristState.WRIST_OUT, StateProps.GrabberState.GRABBER_ONE,
+                            INTAKE_LIFT_POSITIONS.length - 1);
+                case SCORE_DOUBLE:
+                    return new StateProps(0, 1, StateProps.WristState.WRIST_OUT, StateProps.GrabberState.GRABBER_TWO,
+                            INTAKE_LIFT_POSITIONS.length - 1);
+                default:
+                    throw new IllegalStateException("missed " + this);
+            }
         }
     }
 
-    private AtomicInteger armPixelsHigh = new AtomicInteger(1);
-    public int armTicksOverride = -1;
-
-    private int armTicks() {
-        return armTicksOverride == -1
-                ? Math.max(0, armPixelsHigh.get()) * LIFT_PIXEL_TICKS + LIFT_LOWEST_SCORE_TICKS
-                : armTicksOverride;
-    }
-
     public State state = State.LOWERED;
-    private Queue<State> futureStates = new LinkedList<>();
-    private Future<?> runnerStatus;
+    public StateProps stateProps = state.props();
+    private List<Future<?>> runnerStatus = new ArrayList<>();
     private ExecutorService runner = Executors.newFixedThreadPool(1);
     private final Integer ticker = 0;
 
@@ -94,24 +203,17 @@ public class StateManager {
                 }
             }
             for (DcMotor m : arm) {
-                if (position == 0) {
-                    // take the opportunity to recalibrate encoders
-                    // TODO PEE
-                    // m.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-                    m.setMode(DcMotor.RunMode.RUN_TO_POSITION);
-                    m.setPower(LIFT_HOLDING_POWER); // TODO fix motor fighting
-                } else {
-                    m.setPower(LIFT_HOLDING_POWER);
-                }
+                m.setPower(LIFT_HOLDING_POWER);
             }
         } catch (InterruptedException ignored) {}
     }
 
     private void setServoBlocking(Servo servo, double position, long wait) {
-        servo.setPosition(position);
-        try {
-            Thread.sleep(wait);
-        } catch (InterruptedException ignored) {
+        if (servo.getPosition() != position) {
+            servo.setPosition(position);
+            try {
+                Thread.sleep(wait);
+            } catch (InterruptedException ignored) {}
         }
     }
 
@@ -121,8 +223,6 @@ public class StateManager {
             second.run();
         };
     }
-
-    Map<State, Map<State, Runnable>> transitions;
 
     public StateManager(HardwareMap hardwareMap, Telemetry telemetry) {
         this.hardwareMap = hardwareMap;
@@ -150,144 +250,55 @@ public class StateManager {
         wrist.setDirection(Servo.Direction.REVERSE);
         wrist.setPosition(WRIST_START);
 
-        transitions = new EnumMap<>(State.class);
-        Map<State, Map<State, Integer>> dists = new EnumMap<>(State.class);
-
-        Map<State, Runnable> targets = new EnumMap<>(State.class);
-        targets.put(State.INTAKING, () -> {});
-        targets.put(State.LOWERED, () -> {
-            intake.setPower(0);
-            setServoBlocking(grabber, GRABBER_START, SERVO_WAIT_SHORT_MS);
-        });
-        transitions.put(State.INTAKING, targets);
-
-        targets = new EnumMap<>(State.class);
-        targets.put(State.LOWERED, () -> {});
-        targets.put(State.INTAKING, () -> {
-            intake.setPower(-1);
-            setServoBlocking(grabber, GRABBER_DOUBLE, SERVO_WAIT_SHORT_MS);
-        });
-        targets.put(State.RAISIN, () -> setArmBlocking(armTicks()));
-        transitions.put(State.LOWERED, targets);
-
-        targets = new EnumMap<>(State.class);
-        targets.put(State.RAISIN, () -> {});
-        targets.put(State.LOWERED, () -> setArmBlocking(0));
-        targets.put(State.SCORE_SINGLE, () -> {
-            setServoBlocking(wrist, WRIST_DUMP, SERVO_WAIT_LONG_MS);
-            setServoBlocking(grabber, GRABBER_SINGLE, SERVO_WAIT_SHORT_MS);
-        });
-        targets.put(State.SCORE_DOUBLE, () -> {
-            setServoBlocking(wrist, WRIST_DUMP, SERVO_WAIT_LONG_MS);
-            setServoBlocking(grabber, GRABBER_DOUBLE, SERVO_WAIT_SHORT_MS);
-        });
-        transitions.put(State.RAISIN, targets);
-
-        targets = new EnumMap<>(State.class);
-        targets.put(State.SCORE_SINGLE, () -> {});
-        targets.put(State.RAISIN, () -> {
-            wrist.setPosition(WRIST_START);
-            grabber.setPosition(GRABBER_START);
-            try {
-                Thread.sleep(SERVO_WAIT_LONG_MS);
-            } catch (InterruptedException ignored) {
-            }
-        });
-        targets.put(State.SCORE_DOUBLE,
-                () -> setServoBlocking(grabber, GRABBER_DOUBLE, SERVO_WAIT_SHORT_MS));
-        transitions.put(State.SCORE_SINGLE, targets);
-
-        targets = new EnumMap<>(State.class);
-        targets.put(State.SCORE_DOUBLE, () -> {});
-        targets.put(State.RAISIN, () -> {
-            wrist.setPosition(WRIST_START);
-            grabber.setPosition(GRABBER_START);
-            try {
-                Thread.sleep(SERVO_WAIT_LONG_MS);
-            } catch (InterruptedException ignored) {
-            }
-        });
-        targets.put(State.SCORE_SINGLE,
-                () -> setServoBlocking(grabber, GRABBER_SINGLE, SERVO_WAIT_SHORT_MS));
-        transitions.put(State.SCORE_DOUBLE, targets);
-
-        for (Map.Entry<State, Map<State, Runnable>> target : transitions.entrySet()) {
-            State from = target.getKey();
-            Map<State, Integer> targetDists = new EnumMap<>(State.class);
-            for (Map.Entry<State, Runnable> transition : target.getValue().entrySet()) {
-                State to = transition.getKey();
-                targetDists.put(to, from == to ? 0 : 1);
-            }
-            dists.put(from, targetDists);
-        }
-
-        for (State intermediary : State.values()) {
-            for (State from : State.values()) {
-                for (State to : State.values()) {
-                    int currDist = dists.get(from)
-                            .getOrDefault(to, Integer.MAX_VALUE - 1);
-                    int newDist = Optional.ofNullable(dists.get(from).get(intermediary))
-                            .flatMap(fi -> Optional.ofNullable(dists.get(intermediary).get(to))
-                                    .map(it -> fi + it))
-                            .orElse(Integer.MAX_VALUE);
-                    if (newDist < currDist) {
-                        dists.get(from).put(to, newDist);
-                        transitions.get(from).put(to,
-                                sequence(transitions.get(from).get(intermediary),
-                                        transitions.get(intermediary).get(to)));
-                    }
-                }
-            }
-        }
+        intakeLift = hardwareMap.get(Servo.class, "intakeLift");
+        intakeLift.setPosition(INTAKE_LIFT_POSITIONS[stateProps.extendoIdx]);
     }
 
     public void queueState(State newState) {
-        futureStates.add(newState);
+        // both raised, defer to old height
+        StateProps props = newState.props();
+        if (props.liftHeight != 0 && stateProps.liftHeight != 0) {
+            props.liftHeight = stateProps.liftHeight;
+        }
+        propsTo(_p -> props);
     }
 
     public void raiseArm() {
-        if (state.isArmDown()) {
+        if (stateProps.liftHeight == 0) {
             queueState(State.RAISIN);
         } else {
-            armPixelsHigh.incrementAndGet();
+            propsTo(p -> new StateProps(p.intakePower, p.liftHeight + 1, p.wristState, p.grabberState, p.extendoIdx));
         }
     }
 
     public void lowerArm() {
-        if (!state.isArmDown()) {
-            if (armPixelsHigh.getAndUpdate(x -> x <= 1 ? 1 : x - 1) <= 1) {
-                queueState(State.LOWERED);
-            }
+        if (stateProps.liftHeight != 0 && stateProps.liftHeight > 0) {
+            propsTo(p -> new StateProps(p.intakePower, p.liftHeight - 1, p.wristState, p.grabberState, p.extendoIdx));
         }
     }
 
-    public void update() {
-        telemetry.addData("arm0At", arm[0].getCurrentPosition());
-        // telemetry.addData("arm1At", arm[1].getCurrentPosition());
-        telemetry.addData("arm0", arm[0].getTargetPosition());
-        // telemetry.addData("arm1", arm[1].getTargetPosition());
-        State nextState = state;
-        boolean changed = false;
-        if (!futureStates.isEmpty() && !isBusy()) {
-            nextState = futureStates.poll();
-            changed = true;
-        }
-        Runnable transition = transitions.get(state).get(nextState);
-        state = nextState;
-        telemetry.addData("busy", isBusy());
-        if (!isBusy() && !state.isArmDown()) {
-            int targetPos = armTicks();
-            boolean busy = isArmBusy();
-            for (DcMotor m : arm) {
-                m.setTargetPosition(targetPos);
-                m.setPower(busy ? LIFT_MOVING_POWER : LIFT_HOLDING_POWER);
+    public void raiseExtendo() {
+        propsTo(p -> {
+            int newIdx = p.extendoIdx + 1;
+            if (newIdx >= INTAKE_LIFT_POSITIONS.length) {
+                newIdx = p.extendoIdx;
             }
-        }
-        // this has to go after motor set target positions
-        // otherwise waitToIdle on the arm finishes too fast because the target position is old
-        if (changed) { // without guard, status constantly reset -> never busy
-            runnerStatus = runner.submit(transition);
-        }
+            return new StateProps(p.intakePower, p.liftHeight, p.wristState, p.grabberState, newIdx);
+        });
+    }
+
+    public void lowerExtendo() {
+        propsTo(p -> {
+            int newIdx = p.extendoIdx - 1;
+            if (newIdx < 0) {
+                newIdx = INTAKE_LIFT_POSITIONS.length - 1;
+            }
+            return new StateProps(p.intakePower, p.liftHeight, p.wristState, p.grabberState, newIdx);
+        });
+    }
+
+    public void update() {
+        runnerStatus.removeIf(Future::isDone);
 
         synchronized (ticker) {
             ticker.notifyAll();
@@ -295,6 +306,6 @@ public class StateManager {
     }
 
     public boolean isBusy() {
-        return runnerStatus != null && !runnerStatus.isDone();
+        return runnerStatus.stream().anyMatch(f -> !f.isDone());
     }
 }
