@@ -32,7 +32,7 @@ public class Auto extends OpMode {
         TO_SPIKE(0, 0),
         DROP_PURPLE(-1, 2000),
         STOP_PURPLE_DROP(-1, 0),
-        TO_BACKDROP(1, 0),
+        TO_BACKDROP(-1, 0),
         RAISE_YELLOW(-1, 2000),
         DROP_YELLOW(-1, 2000),
         RETRACT_YELLOW(-1, 500),
@@ -126,28 +126,61 @@ public class Auto extends OpMode {
         autoState = AutoState.TO_SPIKE;
 
         Pose2d startPoseRaw;
-        Function<TrajectorySequenceBuilder, TrajectorySequenceBuilder> leftStart, centerStart, rightStart, back;
+        Function<TrajectorySequenceBuilder, TrajectorySequenceBuilder> leftStart, centerStart, rightStart;
         if (!SHORT) {
             startPoseRaw = new Pose2d(-37.719, -61.281, Math.toRadians(-90));
             leftStart = (b) -> b
                     .setReversed(true)
-                    .splineToConstantHeading(flipVector(new Vector2d(-37.719, -55)), flipDirection(Math.toRadians(90)))
-                    .splineToSplineHeading(flipPose(new Pose2d(-35.344, -29 + 5, Math.toRadians(0))), flipDirection(Math.toRadians(80)))
-                    .setReversed(false);
+                    .splineTo(flipVector(new Vector2d(-37.719, -55)), flipDirection(Math.toRadians(90)))
+                    .splineToSplineHeading(flipPose(new Pose2d(-35.344 - 5, -35.34 + 8, Math.toRadians(0))), flipDirection(Math.toRadians(90)))
+                    .forward(5)
+                    .addDisplacementMarker(() -> {
+                        stateManager.lowerExtendo();
+                        try {
+                            Thread.sleep(1000);
+                        } catch (InterruptedException ignored) {}
+                        stateManager.raiseExtendo();
+                    })
+                    .setReversed(false)
+                    .waitSeconds(3)
+                    .lineToConstantHeading(flipVector(new Vector2d(-35.344, -12)))
+                    .waitSeconds(0)
+                    .splineTo(flipVector(new Vector2d(25, -12)), flipDirection(Math.toRadians(0)));
             centerStart = (b) -> b
                     .setReversed(true)
                     .splineToConstantHeading(flipVector(new Vector2d(-37.719, -55)), flipDirection(Math.toRadians(90)))
                     .splineToSplineHeading(flipPose(new Pose2d(-35.344, -34, Math.toRadians(-90))), flipDirection(Math.toRadians(80)))
-                    .setReversed(false);
+                    .forward(5)
+                    .addDisplacementMarker(() -> {
+                        stateManager.lowerExtendo();
+                        try {
+                            Thread.sleep(1000);
+                        } catch (InterruptedException ignored) {}
+                        stateManager.raiseExtendo();
+                    })
+                    .setReversed(false)
+                    .setReversed(false)
+                    .lineToLinearHeading(flipPose(new Pose2d(-35.34, -35.34, Math.toRadians(0))))
+                    .lineToConstantHeading(flipVector(new Vector2d(-11.78, -35.34)))
+                    .lineToConstantHeading(flipVector(new Vector2d(-11.78, -12)))
+                    .waitSeconds(0)
+                    .splineTo(flipVector(new Vector2d(25, -12)), flipDirection(Math.toRadians(0)));
             rightStart = (b) -> b
                     .setReversed(true)
-                    .splineToConstantHeading(flipVector(new Vector2d(-37.719, -55)), flipDirection(Math.toRadians(90)))
-                    .splineToSplineHeading(flipPose(new Pose2d(-35.344, -29 - 5, Math.toRadians(180))), flipDirection(Math.toRadians(80)))
-                    .setReversed(false);
-            back = (b) -> b
-                    .lineToConstantHeading(flipVector(new Vector2d(-35.455, -35)))
-                    .splineToSplineHeading(flipPose(new Pose2d(-48, -58.907, Math.toRadians(0))), flipDirection(Math.toRadians(0)))
-                    .lineToConstantHeading(flipVector(new Vector2d(-11.781, -58.907)));
+                    .splineTo(flipVector(new Vector2d(-37.719, -55)), flipDirection(Math.toRadians(90)))
+                    .splineToSplineHeading(flipPose(new Pose2d(-35.344 + 5, -35.34, Math.toRadians(180))), flipDirection(Math.toRadians(0)))
+                    .forward(5)
+                    .addDisplacementMarker(() -> {
+                        stateManager.lowerExtendo();
+                        try {
+                            Thread.sleep(1000);
+                        } catch (InterruptedException ignored) {}
+                        stateManager.raiseExtendo();
+                    })
+                    .setReversed(false)
+                    .setReversed(false)
+                    .splineTo(flipVector(new Vector2d(-20, -12)), flipDirection(Math.toRadians(0)))
+                    .splineTo(flipVector(new Vector2d(25, -12)), flipDirection(Math.toRadians(0)));
         } else {
             startPoseRaw = new Pose2d(14.166, -70.281 + 18 / 2, Math.toRadians(-90));
             leftStart = (b) -> b
@@ -165,34 +198,53 @@ public class Auto extends OpMode {
                     .splineToConstantHeading(flipVector(new Vector2d(14.166, -55)), flipDirection(Math.toRadians(90)))
                     .splineToSplineHeading(flipPose(new Pose2d(11.781, -29 + 5, Math.toRadians(180))), flipDirection(Math.toRadians(100)))
                     .setReversed(false);
-            back = (b) -> b
-                    .lineToSplineHeading(flipPose(new Pose2d(16, -51, Math.toRadians(0))))
-                    .splineToSplineHeading(flipPose(new Pose2d(35.344, -56, Math.toRadians(0))), flipDirection(Math.toRadians(0)));
         }
-        Function<TrajectorySequenceBuilder, TrajectorySequenceBuilder> pushProp = (b) -> b
-                .back(6)
-                .forward(6);
-        Function<TrajectorySequenceBuilder, TrajectorySequenceBuilder> bottomRendevous = (b) -> b
-                .lineToConstantHeading(flipVector(new Vector2d(35.344, -58.907)));
-        Function<TrajectorySequenceBuilder, TrajectorySequenceBuilder> topRendevous = (b) -> b
-                .lineToConstantHeading(flipVector(new Vector2d(-11.781, -10)))
-                .lineToConstantHeading(flipVector(new Vector2d(35.344, -10)));
-        Function<TrajectorySequenceBuilder, TrajectorySequenceBuilder> rendevous = SHORT
-                ? ((x) -> x)
-                : GO_TOP
-                ? topRendevous
-                : bottomRendevous;
         Function<TrajectorySequenceBuilder, TrajectorySequenceBuilder> leftEnd = (b) -> b
-                .splineToSplineHeading(flipPose(new Pose2d(53.5, -35.344 + 6, Math.toRadians(0))), flipDirection(Math.toRadians(0)));
+                .splineTo(flipVector(new Vector2d(49.9, -35.344 + 6)), flipDirection(Math.toRadians(0)))
+                .addDisplacementMarker(() -> {
+                    stateManager.raiseArm();
+                    stateManager.raiseArm();
+                    stateManager.queueState(StateManager.State.SCORE_DOUBLE);
+                    try {
+                        Thread.sleep(1000);
+                    } catch (InterruptedException ignored) {}
+                    stateManager.queueState(StateManager.State.LOWERED);
+                });
         Function<TrajectorySequenceBuilder, TrajectorySequenceBuilder> centerEnd = (b) -> b
-                .splineToSplineHeading(flipPose(new Pose2d(53.5, -35.344, Math.toRadians(0))), flipDirection(Math.toRadians(0)));
+                .splineTo(flipVector(new Vector2d(49.9, -35.344)), flipDirection(Math.toRadians(0)))
+                .addDisplacementMarker(() -> {
+                    stateManager.raiseArm();
+                    stateManager.raiseArm();
+                    stateManager.queueState(StateManager.State.SCORE_DOUBLE);
+                    try {
+                        Thread.sleep(1000);
+                    } catch (InterruptedException ignored) {}
+                    stateManager.queueState(StateManager.State.LOWERED);
+                });
         Function<TrajectorySequenceBuilder, TrajectorySequenceBuilder> rightEnd = (b) -> b
-                .splineToSplineHeading(flipPose(new Pose2d(53.5, -35.344 - 6, Math.toRadians(0))), flipDirection(Math.toRadians(0)));
+                .splineTo(flipVector(new Vector2d(49.9, -35.344 - 6)), flipDirection(Math.toRadians(0)))
+                .addDisplacementMarker(() -> {
+                    stateManager.raiseArm();
+                    stateManager.raiseArm();
+                    stateManager.queueState(StateManager.State.SCORE_DOUBLE);
+                    try {
+                        Thread.sleep(1000);
+                    } catch (InterruptedException ignored) {}
+                    stateManager.queueState(StateManager.State.LOWERED);
+                });
         Function<TrajectorySequenceBuilder, TrajectorySequenceBuilder> park = (b) -> b
                 .setReversed(true)
                 .back(5)
                 .splineTo(flipVector(new Vector2d(57, -58.907)), flipDirection(0))
                 .setReversed(false);
+        Function<TrajectorySequenceBuilder, TrajectorySequenceBuilder> cycle = (b) -> b
+                .setReversed(true)
+                .splineTo(flipVector(new Vector2d(25, -10.485)), flipDirection(Math.toRadians(180)))
+                .splineTo(flipVector(new Vector2d(-59, -10.485)), flipDirection(Math.toRadians(180)))
+                .waitSeconds(0)
+                .splineTo(flipVector(new Vector2d(-61, -10.485)), flipDirection(Math.toRadians(180)))
+                .setReversed(false)
+                .splineTo(flipVector(new Vector2d(25, -10.485)), flipDirection(Math.toRadians(0)));
 
         Pose2d startPoseCorrected = flipPose(startPoseRaw);
         drive = new SampleMecanumDrive(hardwareMap);
@@ -201,49 +253,19 @@ public class Auto extends OpMode {
         List<TrajectorySequence> spikePaths = new ArrayList<>();
         spikePaths.add(sequence(
                 drive.trajectorySequenceBuilder(startPoseCorrected),
-                leftStart,
-                pushProp
-        ).build());
-        spikePaths.add(sequence(
-                drive.trajectorySequenceBuilder(spikePaths.get(spikePaths.size() - 1).end()),
-                back,
-                rendevous,
-                leftEnd
-        ).build());
-        spikePaths.add(park.apply(
-                drive.trajectorySequenceBuilder(spikePaths.get(spikePaths.size() - 1).end())
+                leftStart, leftEnd
         ).build());
         paths.put(Propecessor.Spike.LEFT, spikePaths);
         spikePaths = new ArrayList<>();
         spikePaths.add(sequence(
                 drive.trajectorySequenceBuilder(startPoseCorrected),
-                rightStart,
-                pushProp
-        ).build());
-        spikePaths.add(sequence(
-                drive.trajectorySequenceBuilder(spikePaths.get(spikePaths.size() - 1).end()),
-                back,
-                rendevous,
-                rightEnd
-        ).build());
-        spikePaths.add(park.apply(
-                drive.trajectorySequenceBuilder(spikePaths.get(spikePaths.size() - 1).end())
+                rightStart, rightEnd
         ).build());
         paths.put(Propecessor.Spike.RIGHT, spikePaths);
         spikePaths = new ArrayList<>();
         spikePaths.add(sequence(
                 drive.trajectorySequenceBuilder(startPoseCorrected),
-                centerStart,
-                pushProp
-        ).build());
-        spikePaths.add(sequence(
-                drive.trajectorySequenceBuilder(spikePaths.get(spikePaths.size() - 1).end()),
-                back,
-                rendevous,
-                centerEnd
-        ).build());
-        spikePaths.add(park.apply(
-                drive.trajectorySequenceBuilder(spikePaths.get(spikePaths.size() - 1).end())
+                centerStart, centerEnd
         ).build());
         paths.put(Propecessor.Spike.CENTER, spikePaths);
     }
@@ -254,7 +276,7 @@ public class Auto extends OpMode {
         chosenPaths = paths.get(IS_RED ? processor.selectedSpike : processor.selectedSpike.mirror());
         // TODO HACK
         try {
-            Thread.sleep(0);
+            Thread.sleep(10000);
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
@@ -281,25 +303,20 @@ public class Auto extends OpMode {
                     } else {
                         switch (autoState) {
                             case DROP_PURPLE:
-                                /*stateManager.queueState(StateManager.State.RAISIN);
-                                stateManager.armTicksOverride = 610;
-                                stateManager.queueState(StateManager.State.SCORE_SINGLE);
-                                stateManager.armTicksOverride = -1;
-                                stateManager.queueState(StateManager.State.LOWERED);*/
-                                stateManager.intake.setPower(0.4);
+                                // stateManager.intake.setPower(0.4);
                                 break;
                             case STOP_PURPLE_DROP:
-                                stateManager.intake.setPower(0);
+                                // stateManager.intake.setPower(0);
                                 break;
                             case RAISE_YELLOW:
-                                stateManager.raiseArm();
-                                stateManager.raiseArm();
+                                // stateManager.raiseArm();
+                                // stateManager.raiseArm();
                                 break;
                             case DROP_YELLOW:
-                                stateManager.queueState(StateManager.State.SCORE_DOUBLE);
+                                // stateManager.queueState(StateManager.State.SCORE_DOUBLE);
                                 break;
                             case RETRACT_YELLOW:
-                                stateManager.queueState(StateManager.State.LOWERED);
+                                // stateManager.queueState(StateManager.State.LOWERED);
                                 break;
                             default:
                                 // throw new IllegalStateException("unknown nonpath: " + autoState);
@@ -312,7 +329,7 @@ public class Auto extends OpMode {
                     autoFinished = true;
                 }
             }
-            telemetry.addData("state", autoState);
+            // telemetry.addData("state", autoState);
         } else {
             // crash itself
             portal.close();

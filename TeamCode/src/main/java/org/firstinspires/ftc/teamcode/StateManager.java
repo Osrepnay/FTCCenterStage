@@ -34,8 +34,8 @@ public class StateManager {
     static final double GRABBER_START = 0.0295;
     static final double GRABBER_SINGLE = GRABBER_START + 0.0232;
     static final double GRABBER_DOUBLE = GRABBER_START + 0.122;
-    static final double WRIST_START = 0.008;
-    static final double WRIST_DUMP = WRIST_START + 0.26;
+    static final double WRIST_START = 0.26;
+    static final double WRIST_DUMP = WRIST_START + 0.263;
     static final long SERVO_WAIT_SHORT_MS = 150;
     static final long SERVO_WAIT_LONG_MS = 300;
 
@@ -86,7 +86,7 @@ public class StateManager {
     }
 
     private int liftTicks(int liftHeight) {
-        return liftHeight == 0 ? 0 : liftHeight * LIFT_PIXEL_TICKS + LIFT_LOWEST_SCORE_TICKS;
+        return Math.min(2850, liftHeight == 0 ? 0 : liftHeight * LIFT_PIXEL_TICKS + LIFT_LOWEST_SCORE_TICKS);
     }
 
     private Runnable transitionProps(StateProps from, StateProps to) {
@@ -136,6 +136,8 @@ public class StateManager {
         if (from.intakePower != to.intakePower) {
             run = sequence(run, () -> intake.setPower(to.intakePower));
         }
+        telemetry.addData("amongus sus before", from.extendoIdx);
+        telemetry.addData("amongus sus after", from.extendoIdx);
         if (from.extendoIdx != to.extendoIdx) {
             run = sequence(run, () -> intakeLift.setPosition(INTAKE_LIFT_POSITIONS[to.extendoIdx]));
         }

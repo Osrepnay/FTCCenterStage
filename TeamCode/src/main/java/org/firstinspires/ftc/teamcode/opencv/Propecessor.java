@@ -106,7 +106,6 @@ public class Propecessor implements VisionProcessor {
 
     @Override
     public Object processFrame(Mat frame, long captureTimeNanos) {
-        telemetry.addLine("test");
         Tuple<Double, Point> leftRes = processSide(frame.submat(
                         new Rect(Math.max(0, leftXRange.start - horizontalTolerance), 0,
                                 leftXRange.size() + 2 * horizontalTolerance, frame.height())).clone(),
@@ -123,8 +122,8 @@ public class Propecessor implements VisionProcessor {
         spikeLocCenter = new Rect(
                 (int) centerRes.second.x + centerXRange.start - horizontalTolerance, (int) centerRes.second.y,
                 centerXRange.size(), centerHeight);
-        telemetry.addData("left", avgLeft);
-        telemetry.addData("center", avgCenter);
+        // telemetry.addData("left", avgLeft);
+        // telemetry.addData("center", avgCenter);
         Spike select;
         if (avgLeft > detectThreshold) {
             if (avgCenter > detectThreshold) {
