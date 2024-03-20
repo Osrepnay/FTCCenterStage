@@ -1,10 +1,13 @@
 package org.firstinspires.ftc.teamcode;
 
+import androidx.annotation.NonNull;
+
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 import com.qualcomm.robotcore.hardware.Servo;
+import com.qualcomm.robotcore.hardware.ServoImplEx;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
 
@@ -22,9 +25,9 @@ public class StateManager {
 
     DcMotor intake;
     private DcMotorEx[] arm;
-    private Servo grabber;
-    private Servo wrist;
-    private Servo intakeLift;
+    private ServoImplEx grabber;
+    private ServoImplEx wrist;
+    private ServoImplEx intakeLift;
     static final long LIFT_DROP_TIMEOUT_MS = 2000;
     static final long LIFT_TICKS_THRESHOLD = 5;
     static final int LIFT_PIXEL_TICKS = 217;
@@ -34,8 +37,8 @@ public class StateManager {
     static final double GRABBER_START = 0.0295;
     static final double GRABBER_SINGLE = GRABBER_START + 0.0232;
     static final double GRABBER_DOUBLE = GRABBER_START + 0.122;
-    static final double WRIST_START = 0.26;
-    static final double WRIST_DUMP = WRIST_START + 0.263;
+    static final double WRIST_START = 0.254;
+    static final double WRIST_DUMP = WRIST_START + 0.17;
     static final long SERVO_WAIT_SHORT_MS = 150;
     static final long SERVO_WAIT_LONG_MS = 300;
 
@@ -61,6 +64,23 @@ public class StateManager {
     */
 
     public static class StateProps {
+        @NonNull
+        @Override
+        public String toString() {
+            return "StateProps{" +
+                    "intakePower=" + intakePower +
+                    ", liftHeight=" + liftHeight +
+                    ", wristState=" + wristState +
+                    ", grabberState=" + grabberState +
+                    ", extendoIdx=" + extendoIdx +
+                    '}';
+        }
+
+        @Override
+        public StateProps clone() {
+            return new StateProps(intakePower, liftHeight, wristState, grabberState, extendoIdx);
+        }
+
         public enum WristState {
             WRIST_IN, WRIST_OUT
         }
@@ -90,6 +110,7 @@ public class StateManager {
     }
 
     private Runnable transitionProps(StateProps from, StateProps to) {
+        from = from.clone();
         Runnable run = () -> {};
         // collapse bucket while going down or up
         if (from.liftHeight == 0 && to.liftHeight != 0
@@ -98,23 +119,28 @@ public class StateManager {
                 setServoBlocking(wrist, WRIST_START, 0);
                 setServoBlocking(grabber, GRABBER_START, SERVO_WAIT_LONG_MS);
             });
+            from.wristState = StateProps.WristState.WRIST_IN;
+            from.grabberState = StateProps.GrabberState.GRABBER_GRAB;
         }
         if (from.liftHeight != to.liftHeight) {
             run = sequence(run, () -> setArmBlocking(liftTicks(to.liftHeight)));
+            from.liftHeight = to.liftHeight;
         }
         if (from.wristState != to.wristState) {
-            double wristPos;
+            // double wristPos;
             switch (to.wristState) {
                 case WRIST_IN:
-                    wristPos = WRIST_START;
+                    // wristPos = WRIST_START;
+                    run = sequence(run, () -> setServoBlocking(wrist, WRIST_START, SERVO_WAIT_LONG_MS));
                     break;
                 case WRIST_OUT:
-                    wristPos = WRIST_DUMP;
+                    // wristPos = WRIST_DUMP;
+                    run = sequence(run, () -> { setServoBlocking(wrist, WRIST_DUMP, SERVO_WAIT_LONG_MS); wrist.setPwmDisable(); });
                     break;
                 default:
                     throw new IllegalStateException("didn't catch " + to.wristState);
             }
-            run = sequence(run, () -> setServoBlocking(wrist, wristPos, SERVO_WAIT_LONG_MS));
+            from.wristState = to.wristState;
         }
         if (from.grabberState != to.grabberState) {
             double grabberPos;
@@ -132,14 +158,15 @@ public class StateManager {
                     throw new IllegalStateException("didn't catch " + to.grabberState);
             }
             run = sequence(run, () -> setServoBlocking(grabber, grabberPos, SERVO_WAIT_SHORT_MS));
+            from.grabberState = to.grabberState;
         }
         if (from.intakePower != to.intakePower) {
             run = sequence(run, () -> intake.setPower(to.intakePower));
+            from.intakePower = to.intakePower;
         }
-        telemetry.addData("amongus sus before", from.extendoIdx);
-        telemetry.addData("amongus sus after", from.extendoIdx);
         if (from.extendoIdx != to.extendoIdx) {
             run = sequence(run, () -> intakeLift.setPosition(INTAKE_LIFT_POSITIONS[to.extendoIdx]));
+            from.extendoIdx = to.extendoIdx;
         }
         return run;
     }
@@ -210,7 +237,10 @@ public class StateManager {
         } catch (InterruptedException ignored) {}
     }
 
-    private void setServoBlocking(Servo servo, double position, long wait) {
+    private void setServoBlocking(ServoImplEx servo, double position, long wait) {
+        if (!servo.isPwmEnabled()) {
+            servo.setPwmEnable();
+        }
         if (servo.getPosition() != position) {
             servo.setPosition(position);
             try {
@@ -245,14 +275,14 @@ public class StateManager {
             m.setTargetPositionTolerance((int) LIFT_TICKS_THRESHOLD);
         }
 
-        grabber = hardwareMap.get(Servo.class, "grabber");
+        grabber = hardwareMap.get(ServoImplEx.class, "grabber");
         grabber.setPosition(GRABBER_START);
 
-        wrist = hardwareMap.get(Servo.class, "wrist");
+        wrist = hardwareMap.get(ServoImplEx.class, "wrist");
         wrist.setDirection(Servo.Direction.REVERSE);
         wrist.setPosition(WRIST_START);
 
-        intakeLift = hardwareMap.get(Servo.class, "intakeLift");
+        intakeLift = hardwareMap.get(ServoImplEx.class, "intakeLift");
         intakeLift.setPosition(INTAKE_LIFT_POSITIONS[stateProps.extendoIdx]);
     }
 

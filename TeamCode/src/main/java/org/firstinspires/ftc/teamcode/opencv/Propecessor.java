@@ -153,7 +153,7 @@ public class Propecessor implements VisionProcessor {
     public void onDrawFrame(Canvas canvas, int onscreenWidth, int onscreenHeight, float scaleBmpPxToCanvasPx,
                             float scaleCanvasDensity, Object userContext) {
         selectedSpike = (Spike) userContext;
-        telemetry.addData("spike", selectedSpike);
+        // telemetry.addData("spike", selectedSpike);
         Paint paint = new Paint();
         paint.setColor(Color.GREEN);
         paint.setStyle(Paint.Style.STROKE);

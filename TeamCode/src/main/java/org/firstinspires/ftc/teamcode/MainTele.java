@@ -54,7 +54,7 @@ public class MainTele extends OpMode {
     private StateManager stateManager;
     private static final double STRAFE_MULT = SampleMecanumDrive.LATERAL_MULTIPLIER;
     private static final double LAUNCH_START = 0;
-    private static final double LAUNCH_LAUNCH = LAUNCH_START + 0.5;
+    private static final double LAUNCH_LAUNCH = LAUNCH_START + 1;
     private static final double HANG_START = 0;
     private static final double HANG_RELEASE = HANG_START + 0.06;
 
@@ -120,7 +120,7 @@ public class MainTele extends OpMode {
         winch = hardwareMap.get(DcMotor.class, "winch");
         stateManager = new StateManager(hardwareMap, telemetry);
         launch = hardwareMap.get(Servo.class, "launch");
-        launch.setDirection(Servo.Direction.REVERSE);
+        // launch.setDirection(Servo.Direction.REVERSE);
         launch.setPosition(LAUNCH_START);
         hangLatch = hardwareMap.get(Servo.class, "hangLatch");
         hangLatch.setPosition(HANG_START);
@@ -269,7 +269,6 @@ public class MainTele extends OpMode {
         }
 
         if (gamepad1.b) {
-            telemetry.addData("winching", "winching");
             winch.setPower(1);
         } else if (gamepad1.a) {
             winch.setPower(-1);
@@ -289,6 +288,7 @@ public class MainTele extends OpMode {
         }
 
         telemetry.addData("state", stateManager.state);
+        telemetry.addData("props", stateManager.stateProps);
         telemetry.addData("yaw", yaw / Math.PI * 180);
         telemetry.addData("height", stateManager.stateProps.liftHeight);
         // telemetry.setAutoClear(false);
