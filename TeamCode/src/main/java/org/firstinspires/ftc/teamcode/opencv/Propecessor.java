@@ -96,11 +96,17 @@ public class Propecessor implements VisionProcessor {
         for (int i = 0; i < channels.size(); i++) {
             double scale = i == 0 ? 1 : unsavoryChannelFactor;
             channels.get(i).convertTo(channels.get(i), CvType.CV_64F, scale);
-            Imgproc.boxFilter(new Mat(channels.get(i), roi), channels.get(i), -1, size, new Point(0, 0), true);
+            Mat test = new Mat(channels.get(i), roi);
+            Imgproc.boxFilter(test, channels.get(i), -1, size, new Point(0, 0), true);
+            test.release();
         }
         Core.subtract(channels.get(0), channels.get(1), channels.get(0));
         Core.subtract(channels.get(0), channels.get(2), channels.get(0));
         Core.MinMaxLocResult res = Core.minMaxLoc(channels.get(0));
+        for (Mat mat : channels) {
+            mat.release();
+        }
+        subframe.release();
         return new Tuple<>(res.maxVal, res.maxLoc);
     }
 
@@ -154,6 +160,7 @@ public class Propecessor implements VisionProcessor {
                             float scaleCanvasDensity, Object userContext) {
         selectedSpike = (Spike) userContext;
         // telemetry.addData("spike", selectedSpike);
+        /*
         Paint paint = new Paint();
         paint.setColor(Color.GREEN);
         paint.setStyle(Paint.Style.STROKE);
@@ -165,5 +172,6 @@ public class Propecessor implements VisionProcessor {
         paint.setColor(Color.RED);
         canvas.drawRect(convertRects(scaleRect(spikeLocLeft, scaleBmpPxToCanvasPx)), paint);
         canvas.drawRect(convertRects(scaleRect(spikeLocCenter, scaleBmpPxToCanvasPx)), paint);
+         */
     }
 }

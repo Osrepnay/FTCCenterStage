@@ -1,0 +1,4 @@
+29c29
+<     private final boolean SHORT = true;
+---
+>     private final boolean SHORT = false;

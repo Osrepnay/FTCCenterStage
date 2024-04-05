@@ -1,0 +1,4 @@
+30c30
+<     private final boolean IS_RED = true;
+---
+>     private final boolean IS_RED = false;

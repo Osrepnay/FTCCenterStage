@@ -16,8 +16,8 @@ import java.util.EnumMap;
 import java.util.Map;
 import java.util.function.Function;
 
-@Autonomous(name = "Auto", group = "Iterative Opmode", preselectTeleOp = "MainTele")
-public class Auto extends OpMode {
+@Autonomous(name = "AutoRedFarPark", group = "Iterative Opmode", preselectTeleOp = "MainTele")
+public class AutoRedFarPark extends OpMode {
     private Propecessor processor;
     private VisionPortal portal;
     private Propecessor.Spike spike;
@@ -26,7 +26,7 @@ public class Auto extends OpMode {
     private Map<Propecessor.Spike, TrajectorySequence> paths;
     private boolean autoFinished = false;
 
-    private final boolean SHORT = true;
+    private final boolean SHORT = false;
     private final boolean IS_RED = true;
 
     // frormular: x * 23.563 + 11.781, y * 23.563 + 11.781 for tile
@@ -243,17 +243,17 @@ public class Auto extends OpMode {
         paths = new EnumMap<>(Propecessor.Spike.class);
         TrajectorySequence left = sequence(
                 drive.trajectorySequenceBuilder(startPoseCorrected),
-                leftStart, cycle, rightEnd
+                leftStart
         ).build();
         paths.put(Propecessor.Spike.LEFT, left);
         TrajectorySequence center = sequence(
                 drive.trajectorySequenceBuilder(startPoseCorrected),
-                centerStart, cycle, leftEnd
+                centerStart
         ).build();
         paths.put(Propecessor.Spike.CENTER, center);
         TrajectorySequence right = sequence(
                 drive.trajectorySequenceBuilder(startPoseCorrected),
-                rightStart, cycle, leftEnd
+                rightStart
         ).build();
         paths.put(Propecessor.Spike.RIGHT, right);
         telemetry.addLine("init done");

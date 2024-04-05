@@ -56,7 +56,7 @@ public class MainTele extends OpMode {
     private static final double LAUNCH_START = 0;
     private static final double LAUNCH_LAUNCH = LAUNCH_START + 1;
     private static final double HANG_START = 0;
-    private static final double HANG_RELEASE = HANG_START + 0.06;
+    private static final double HANG_RELEASE = HANG_START + 0.09;
 
     private GamepadWrapper up1;
     private GamepadWrapper left1;
@@ -68,7 +68,7 @@ public class MainTele extends OpMode {
     private GamepadWrapper rightBumper1;
     private GamepadWrapper leftBumper2;
     private GamepadWrapper rightBumper2;
-    private GamepadWrapper back1;
+    private GamepadWrapper touchpad1;
 
     PIDFController headingController = new PIDFController(new PIDCoefficients(0.7, 0.3, 0.3));
 
@@ -84,7 +84,7 @@ public class MainTele extends OpMode {
         rightBumper1 = new GamepadWrapper(gamepad1, g -> g.right_bumper);
         leftBumper2 = new GamepadWrapper(gamepad2, g -> g.left_bumper);
         rightBumper2 = new GamepadWrapper(gamepad2, g -> g.right_bumper);
-        back1 = new GamepadWrapper(gamepad1, g -> g.back);
+        touchpad1 = new GamepadWrapper(gamepad1, g -> g.touchpad);
 
         headingController.setInputBounds(0, 2 * Math.PI);
         headingController.setOutputBounds(-3, 3);
@@ -194,7 +194,7 @@ public class MainTele extends OpMode {
         rightBumper1.update();
         leftBumper2.update();
         rightBumper2.update();
-        back1.update();
+        touchpad1.update();
 
         double pressedX = gamepad1.right_stick_x + gamepad2.right_stick_x;
         double pressedY = -(gamepad1.right_stick_y + gamepad2.right_stick_y);
@@ -275,7 +275,7 @@ public class MainTele extends OpMode {
         } else {
             winch.setPower(0);
         }
-        if (back1.get()) {
+        if (touchpad1.get()) {
             stateManager.propsTo(x -> new StateManager.StateProps(
                     -x.intakePower, x.liftHeight, x.wristState, x.grabberState, x.extendoIdx));
         }
@@ -283,7 +283,7 @@ public class MainTele extends OpMode {
         if (gamepad1.ps) {
             launch.setPosition(LAUNCH_LAUNCH);
         }
-        if (gamepad1.touchpad) {
+        if (gamepad1.back) {
             hangLatch.setPosition(HANG_RELEASE);
         }
 

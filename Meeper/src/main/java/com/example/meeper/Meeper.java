@@ -58,7 +58,7 @@ public class Meeper {
                         flipDirection(Math.toRadians(90)))
                 .forward(7)
                 .addDisplacementMarker(() -> {})
-                .waitSeconds(0.5)
+                .waitSeconds(0.7)
                 .addDisplacementMarker(() -> {})
                 .setReversed(false)
                 .lineToConstantHeading(flipVector(new Vector2d(-35.344, -12)))
@@ -70,26 +70,25 @@ public class Meeper {
                 .splineTo(flipVector(new Vector2d(11.78 - 5, -35.34)), flipDirection(Math.toRadians(180)))
                 .forward(7)
                 .addDisplacementMarker(() -> {})
-                .waitSeconds(0.5)
+                .waitSeconds(0.7)
                 .addDisplacementMarker(() -> {})
                 .setReversed(false)
-                .splineTo(flipVector(new Vector2d(49.9, -35.344 + 6)), Math.toRadians(0))
+                .splineTo(flipVector(new Vector2d(52.5, -35.344 + 6)), Math.toRadians(0))
                 .addDisplacementMarker(() -> {})
                 .waitSeconds(1)
                 .addDisplacementMarker(() -> {});
         Function<TrajectorySequenceBuilder, TrajectorySequenceBuilder> centerStart = (b) -> b
                 .setReversed(true)
                 .splineToConstantHeading(flipVector(new Vector2d(-37.719, -55)), flipDirection(Math.toRadians(90)))
-                .splineToSplineHeading(flipPose(new Pose2d(-35.344, -30, Math.toRadians(-90))),
-                        flipDirection(Math.toRadians(80)))
-                .forward(7)
+                .splineTo(flipVector(new Vector2d(-45, -25)), flipDirection(Math.toRadians(90)))
+                .lineToLinearHeading(flipPose(new Pose2d(-40, -25, flipDirection(Math.toRadians(180)))))
+                .lineToLinearHeading(flipPose(new Pose2d(-37, -12, flipDirection(Math.toRadians(90)))))
                 .addDisplacementMarker(() -> {})
-                .waitSeconds(0.5)
+                .waitSeconds(0.7)
                 .addDisplacementMarker(() -> {})
                 .setReversed(false)
-                .lineToLinearHeading(flipPose(new Pose2d(-35.34, -35.34, Math.toRadians(180))))
-                .splineTo(flipVector(new Vector2d(-48, -25)), flipDirection(Math.toRadians(90)))
-                .splineTo(flipVector(new Vector2d(-40, -12)), flipDirection(Math.toRadians(0)))
+                .strafeLeft(5)
+                .lineToLinearHeading(flipPose(new Pose2d(-35, -12, Math.toRadians(0))))
                 .splineTo(flipVector(new Vector2d(25, -12)), flipDirection(Math.toRadians(0)));
         Function<TrajectorySequenceBuilder, TrajectorySequenceBuilder> centerStartClose = (b) -> b
                 .setReversed(true)
@@ -98,10 +97,10 @@ public class Meeper {
                         flipDirection(Math.toRadians(80)))
                 .forward(7)
                 .addDisplacementMarker(() -> {})
-                .waitSeconds(0.5)
+                .waitSeconds(0.7)
                 .addDisplacementMarker(() -> {})
                 .setReversed(false)
-                .lineToLinearHeading(flipPose(new Pose2d(49.9, -35.344, Math.toRadians(0))))
+                .lineToLinearHeading(flipPose(new Pose2d(52.5, -35.344, Math.toRadians(0))))
                 .addDisplacementMarker(() -> {})
                 .waitSeconds(1)
                 .addDisplacementMarker(() -> {});
@@ -111,51 +110,54 @@ public class Meeper {
                 .splineTo(flipVector(new Vector2d(-35.344 + 5, -35.34)), flipDirection(Math.toRadians(0)))
                 .forward(7)
                 .addDisplacementMarker(() -> {})
-                .waitSeconds(0.5)
+                .waitSeconds(0.7)
                 .addDisplacementMarker(() -> {})
                 .setReversed(false)
                 .splineTo(flipVector(new Vector2d(-20, -12)), flipDirection(Math.toRadians(0)))
                 .splineTo(flipVector(new Vector2d(25, -12)), flipDirection(Math.toRadians(0)));
         Function<TrajectorySequenceBuilder, TrajectorySequenceBuilder> rightStartClose = (b) -> b
                 .setReversed(true)
-                .splineTo(flipVector(new Vector2d(30, -47)), flipDirection(Math.toRadians(45)))
+                // .setTangent(Math.toRadians(0))
                 .splineTo(flipVector(new Vector2d(35.34 - 5, -35.34)), flipDirection(Math.toRadians(180)))
                 .forward(7)
                 .addDisplacementMarker(() -> {})
-                .waitSeconds(0.5)
+                .waitSeconds(0.7)
                 .addDisplacementMarker(() -> {})
                 .setReversed(false)
-                .splineTo(flipVector(new Vector2d(49.9, -35.344 - 6)), Math.toRadians(0))
+                .splineTo(flipVector(new Vector2d(52.5, -35.344 - 6)), Math.toRadians(0))
                 .addDisplacementMarker(() -> {})
                 .waitSeconds(1)
                 .addDisplacementMarker(() -> {});
 
         Function<TrajectorySequenceBuilder, TrajectorySequenceBuilder> leftEnd = (b) -> b
-                .splineTo(flipVector(new Vector2d(49.9, -35.344 + 6)), Math.toRadians(0))
+                .splineTo(flipVector(new Vector2d(52.5, -35.344 + 6)), Math.toRadians(0))
                 .addDisplacementMarker(() -> {})
-                .waitSeconds(1)
+                .waitSeconds(1.2)
                 .addDisplacementMarker(() -> {});
         Function<TrajectorySequenceBuilder, TrajectorySequenceBuilder> centerEnd = (b) -> b
-                .splineTo(flipVector(new Vector2d(49.9, -35.344)), Math.toRadians(0))
+                .splineTo(flipVector(new Vector2d(52.5, -35.344)), Math.toRadians(0))
                 .addDisplacementMarker(() -> {})
-                .waitSeconds(1)
+                .waitSeconds(1.2)
                 .addDisplacementMarker(() -> {});
         Function<TrajectorySequenceBuilder, TrajectorySequenceBuilder> rightEnd = (b) -> b
-                .splineTo(flipVector(new Vector2d(49.9, -35.344 - 6)), Math.toRadians(0))
+                .splineTo(flipVector(new Vector2d(52.5, -35.344 - 6)), Math.toRadians(0))
                 .addDisplacementMarker(() -> {})
-                .waitSeconds(1)
+                .waitSeconds(1.2)
                 .addDisplacementMarker(() -> {});
         Function<TrajectorySequenceBuilder, TrajectorySequenceBuilder> park = (b) -> b
                 .setReversed(true)
                 .back(5)
                 .splineTo(flipVector(new Vector2d(57, -58.907)), flipDirection(0))
                 .setReversed(false);
+        Function<TrajectorySequenceBuilder, TrajectorySequenceBuilder> park2 = (b) -> b
+                .lineToConstantHeading(flipVector(new Vector2d(50, -12)))
+                .forward(10);
         Function<TrajectorySequenceBuilder, TrajectorySequenceBuilder> cycle = (b) -> b
                 .setReversed(true)
                 .splineTo(flipVector(new Vector2d(25, -10.485)), flipDirection(Math.toRadians(180)))
-                .splineTo(flipVector(new Vector2d(-59, -10.485)), flipDirection(Math.toRadians(180)))
+                .splineTo(flipVector(new Vector2d(-54, -10.485)), flipDirection(Math.toRadians(180)))
                 .waitSeconds(0)
-                .splineTo(flipVector(new Vector2d(-61, -10.485)), flipDirection(Math.toRadians(180)))
+                .splineTo(flipVector(new Vector2d(-58.3, -10.485)), flipDirection(Math.toRadians(180)))
                 .setReversed(false)
                 .splineTo(flipVector(new Vector2d(25, -10.485)), flipDirection(Math.toRadians(0)));
 
@@ -165,7 +167,7 @@ public class Meeper {
                 .followTrajectorySequence(drive ->
                         sequence(
                                 drive.trajectorySequenceBuilder(startPose),
-                                rightStart, rightEnd, cycle
+                                centerStart, cycle, centerEnd
                         )
                                 .build());
         meep.setBackground(MeepMeep.Background.FIELD_CENTERSTAGE_JUICE_DARK)

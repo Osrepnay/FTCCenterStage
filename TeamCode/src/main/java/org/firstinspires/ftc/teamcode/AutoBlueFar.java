@@ -16,8 +16,8 @@ import java.util.EnumMap;
 import java.util.Map;
 import java.util.function.Function;
 
-@Autonomous(name = "Auto", group = "Iterative Opmode", preselectTeleOp = "MainTele")
-public class Auto extends OpMode {
+@Autonomous(name = "AutoBlueFar", group = "Iterative Opmode", preselectTeleOp = "MainTele")
+public class AutoBlueFar extends OpMode {
     private Propecessor processor;
     private VisionPortal portal;
     private Propecessor.Spike spike;
@@ -26,8 +26,8 @@ public class Auto extends OpMode {
     private Map<Propecessor.Spike, TrajectorySequence> paths;
     private boolean autoFinished = false;
 
-    private final boolean SHORT = true;
-    private final boolean IS_RED = true;
+    private final boolean SHORT = false;
+    private final boolean IS_RED = false;
 
     // frormular: x * 23.563 + 11.781, y * 23.563 + 11.781 for tile
     private double flipDirection(double rad) {

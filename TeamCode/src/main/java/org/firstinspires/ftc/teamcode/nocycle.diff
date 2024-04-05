@@ -1,0 +1,12 @@
+246c246
+<                 leftStart, cycle, rightEnd
+---
+>                 leftStart, park2
+251c251
+<                 centerStart, cycle, leftEnd
+---
+>                 centerStart, park2
+256c256
+<                 rightStart, cycle, leftEnd
+---
+>                 rightStart, park2

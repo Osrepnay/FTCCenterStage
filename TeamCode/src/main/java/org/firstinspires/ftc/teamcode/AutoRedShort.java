@@ -16,8 +16,8 @@ import java.util.EnumMap;
 import java.util.Map;
 import java.util.function.Function;
 
-@Autonomous(name = "Auto", group = "Iterative Opmode", preselectTeleOp = "MainTele")
-public class Auto extends OpMode {
+@Autonomous(name = "AutoRedShort", group = "Iterative Opmode", preselectTeleOp = "MainTele")
+public class AutoRedShort extends OpMode {
     private Propecessor processor;
     private VisionPortal portal;
     private Propecessor.Spike spike;
